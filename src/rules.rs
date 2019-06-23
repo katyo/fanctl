@@ -5,13 +5,15 @@ use super::{config, hwmon};
 use std::collections::{HashMap, LinkedList};
 use std::cmp::PartialOrd;
 use std::rc::Rc;
+use splines::Spline;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum RuleParseError {
     MissingArg(&'static str),
     WrongType(&'static str, Value),
     UnknownRuleType(String),
     UnknownInput(String),
+    Serde(serde_yaml::Error),
 }
 
 pub trait Rule {
@@ -24,19 +26,9 @@ pub fn instantiate_rule(rule: &config::Rule, inputs: &HashMap<String, Rc<hwmon::
         RuleType::Static => Static::try_from(rule.config.as_ref().unwrap()).map(|r| Box::new(r) as Box<Rule>),
         RuleType::Maximum => Maximum::try_from((rule.config.as_ref().unwrap(), inputs)).map(|r| Box::new(r) as Box<Rule>),
         RuleType::GateCritical => GateCritical::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
+        RuleType::Curve => Curve::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
     };
     ret
-}
-
-fn parse_rule_type<S: AsRef<str>>(ty: S) -> Result<config::RuleType, RuleParseError> {
-    use config::RuleType;
-    let ty = ty.as_ref();
-    match ty {
-        "Static" => Ok(RuleType::Static),
-        "Maximum" => Ok(RuleType::Maximum),
-        "GateCritical" => Ok(RuleType::GateCritical),
-        other => Err(RuleParseError::UnknownRuleType(other.to_string())),
-    }
 }
 
 pub struct Static(f64);
@@ -77,7 +69,8 @@ impl TryFrom<(&Value, &HashMap<String, Rc<hwmon::Sensor>>)> for Maximum {
                 if let &Value::Mapping(ref m) = rule_value {
                     let ty = m.get(&ty_key)
                         .map(|v| match v {
-                            &Value::String(ref s) => parse_rule_type(s),
+                            v @ &Value::String(..) => serde_yaml::from_value(v.clone())
+                                .map_err(RuleParseError::Serde),
                             v => Err(RuleParseError::WrongType("String", v.clone())),
                         })
                         .unwrap_or(Err(RuleParseError::MissingArg("ty")))?;
@@ -188,5 +181,50 @@ impl Rule for GateCritical {
         } else {
             Ok(0.0)
         }
+    }
+}
+
+pub struct Curve {
+    input: Rc<hwmon::Sensor>,
+    spline: Spline<f64, f64>,
+    out_of_bounds_value: f64,
+}
+
+impl Curve {
+    fn new(config: &Value, inputs: &HashMap<String, Rc<hwmon::Sensor>>) -> Result<Curve, RuleParseError> {
+        use splines::{Interpolation, Key};
+        let config: config::Curve = serde_yaml::from_value(config.clone())
+            .map_err(RuleParseError::Serde)?;
+        let input = inputs.get(&config.input)
+            .map(Ok)
+            .unwrap_or_else(|| Err(RuleParseError::UnknownInput(config.input.clone())))
+            .map(Clone::clone)?;
+        let mut is_first = true;
+        let keys = config.keys.iter()
+            .map(|point| {
+                let interpolation = if is_first {
+                    Interpolation::Linear
+                } else {
+                    Interpolation::default()
+                };
+                is_first = false;
+                Key::new(point.input, point.output, interpolation)
+            });
+        let spline = Spline::from_iter(keys);
+        let out_of_bounds_value = config.out_of_bounds_value.unwrap_or(1.0);
+        Ok(Curve {
+            input: input,
+            spline: spline,
+            out_of_bounds_value: out_of_bounds_value,
+        })
+    }
+}
+
+impl Rule for Curve {
+    fn get_value(&self) -> io::Result<f64> {
+        let value = self.input.get_value()?;
+        let ret = self.spline.sample(value)
+            .unwrap_or(self.out_of_bounds_value);
+        Ok(ret)
     }
 }

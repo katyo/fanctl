@@ -21,4 +21,16 @@ rules:
             input: gpu_temp
             value: 1.0
         - ty: Static
-          config: 0.95
+          config: 0.5
+        - ty: Curve
+          config:
+            input: gpu_temp
+            keys:
+              - input: 0.0
+                output: 0.0
+              - input: 30.0
+                output: 0.5
+              - input: 50.0
+                output: 0.9
+              - input: 70
+                output: 1.0

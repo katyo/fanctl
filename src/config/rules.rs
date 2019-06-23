@@ -18,5 +18,19 @@ pub struct Rule {
 pub enum RuleType {
     Static,
     Maximum,
-    GateCritical
+    GateCritical,
+    Curve,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Curve {
+    pub(crate) input: String,
+    pub(crate) keys: Vec<CurvePoint>,
+    pub(crate) out_of_bounds_value: Option<f64>,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub struct CurvePoint {
+    pub(crate) input: f64,
+    pub(crate) output: f64,
 }

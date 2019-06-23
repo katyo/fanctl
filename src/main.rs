@@ -2,6 +2,8 @@
 extern crate clap;
 extern crate serde;
 extern crate serde_yaml;
+extern crate splines;
+extern crate ctrlc;
 
 mod clap_ext;
 pub mod hwmon;
@@ -63,6 +65,13 @@ impl Context {
         }
         Ok(())
     }
+
+    fn disable_outputs(&mut self) -> io::Result<()> {
+        for output in self.outputs.borrow_mut().values_mut() {
+            output.disable()?;
+        }
+        Ok(())
+    }
 }
 
 impl From<Config> for Context {
@@ -104,6 +113,9 @@ fn on_fan_update_error(e: io::Error) {
 }
 
 fn main() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
     let matches = app().get_matches();
     let config_file_path = matches.value_of_os(CONFIG_ARG).unwrap();
     let config_file = fs::OpenOptions::new()
@@ -117,7 +129,12 @@ fn main() {
 
     print_license_info(crate_name!(), "2019", crate_authors!());
 
-    loop {
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    }).expect("Error settting SIGTERM handler");
+    while running.load(Ordering::SeqCst) {
         use std::thread;
 
         if let Err(e) = ctx.run_once() {
@@ -126,4 +143,8 @@ fn main() {
         }
         thread::sleep(ctx.interval());
     }
+    println!("Shutting down, disabling control on all outputs.");
+    ctx.disable_outputs()
+        .expect("failed to shutdown outputs");
+    println!("Shutdown successful.");
 }

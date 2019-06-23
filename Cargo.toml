@@ -8,6 +8,8 @@ license = "GPL-3.0"
 [dependencies]
 clap = "2"
 serde_yaml = "0.8"
+splines = "1.0.0-rc.3"
+ctrlc = "3"
 
 [dependencies.serde]
 version = "1.0"
