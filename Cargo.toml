@@ -1,0 +1,13 @@
+[package]
+name = "fanctl"
+version = "0.1.0"
+authors = ["Matt Coffin <mcoffin13@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+clap = "2"
+serde_yaml = "0.8"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]

@@ -1,0 +1,11 @@
+inputs:
+  gpu_temp:
+    ty: HwmonSensor
+    args:
+      path: /sys/class/hwmon/hwmon0/temp1_input
+outputs:
+  gpu_fan:
+    ty: AmdgpuFan
+    args:
+      path: /sys/class/drm/card0/device/hwmon/hwmon0
+      prefix: fan1
