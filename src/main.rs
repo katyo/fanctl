@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate clap;
 extern crate serde;
-#[macro_use]
 extern crate serde_yaml;
 
 mod clap_ext;
@@ -11,8 +10,6 @@ pub mod rules;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
-use std::convert::TryFrom;
-use std::env;
 use std::fs;
 use std::io;
 use std::rc::Rc;
@@ -34,7 +31,7 @@ fn app() -> clap::App<'static, 'static> {
 }
 
 struct Context {
-    inputs: HashMap<String, Rc<hwmon::Sensor>>,
+    _inputs: HashMap<String, Rc<hwmon::Sensor>>,
     outputs: RefCell<HashMap<String, Box<hwmon::Fan>>>,
     rules: LinkedList<(LinkedList<String>, Box<rules::Rule>)>,
     config: Config,
@@ -80,18 +77,30 @@ impl From<Config> for Context {
         }
         let mut rules = LinkedList::new();
         for rule_binding in config.rules.iter() {
-            use config::RuleType;
             let rule: Box<rules::Rule> = rules::instantiate_rule(&rule_binding.rule, &inputs)
                 .expect("failed to parse rule");
             rules.push_back((rule_binding.outputs.clone(), rule));
         }
         Context {
-            inputs: inputs,
+            _inputs: inputs,
             outputs: RefCell::new(outputs),
             rules: rules,
             config: config,
         }
     }
+}
+
+#[inline(never)]
+fn print_license_info<Sp: AsRef<str>, Sa: AsRef<str>>(program_name: Sp, year: &str, author: Sa) {
+    println!("{} Copyright (C) {} {}", program_name.as_ref(), year, author.as_ref());
+}
+
+#[allow(unused_must_use)]
+fn on_fan_update_error(e: io::Error) {
+    use io::Write;
+
+    let mut stderr = io::stderr();
+    writeln!(&mut stderr, "Error updating fans: {:?}", e);
 }
 
 fn main() {
@@ -103,12 +112,18 @@ fn main() {
         .expect("failed to open config file");
     let config: Config = serde_yaml::from_reader(config_file)
         .expect("failed to parse config file");
-    println!("{:?}", &config);
+
     let mut ctx = Context::from(config);
+
+    print_license_info(crate_name!(), "2019", crate_authors!());
+
     loop {
         use std::thread;
-        ctx.run_once()
-            .expect("failed to run fan updates");
+
+        if let Err(e) = ctx.run_once() {
+            on_fan_update_error(e);
+            break;
+        }
         thread::sleep(ctx.interval());
     }
 }

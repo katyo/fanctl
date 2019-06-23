@@ -3,6 +3,7 @@ name = "fanctl"
 version = "0.1.0"
 authors = ["Matt Coffin <mcoffin13@gmail.com>"]
 edition = "2018"
+license = "GPL-3.0"
 
 [dependencies]
 clap = "2"

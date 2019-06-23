@@ -24,7 +24,6 @@ pub fn instantiate_rule(rule: &config::Rule, inputs: &HashMap<String, Rc<hwmon::
         RuleType::Static => Static::try_from(rule.config.as_ref().unwrap()).map(|r| Box::new(r) as Box<Rule>),
         RuleType::Maximum => Maximum::try_from((rule.config.as_ref().unwrap(), inputs)).map(|r| Box::new(r) as Box<Rule>),
         RuleType::GateCritical => GateCritical::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
-        _ => unimplemented!(),
     };
     ret
 }
@@ -111,8 +110,6 @@ fn partial_max<V: PartialOrd + Copy>(fst: V, snd: V) -> V {
 
 impl Rule for Maximum {
     fn get_value(&self) -> io::Result<f64> {
-        use std::cmp;
-
         let mut max = None;
         for rule in &self.rules {
             let value = rule.get_value()?;

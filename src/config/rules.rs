@@ -1,7 +1,6 @@
 use serde::{Serialize, Deserialize};
 use serde_yaml::Value;
 use std::collections::LinkedList;
-use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RuleBinding {
