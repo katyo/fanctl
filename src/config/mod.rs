@@ -1,13 +1,18 @@
 use serde::{Serialize, Deserialize};
 use serde_yaml::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 
 use super::hwmon;
 
+mod rules;
+pub use rules::*;
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
-    pub inputs: HashMap<String, Input>,
-    pub outputs: HashMap<String, Output>,
+    pub(crate) inputs: HashMap<String, Input>,
+    pub(crate) outputs: HashMap<String, Output>,
+    pub(crate) rules: LinkedList<RuleBinding>,
+    pub(crate) interval: u64,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

@@ -7,10 +7,15 @@ extern crate serde_yaml;
 mod clap_ext;
 pub mod hwmon;
 pub mod config;
+pub mod rules;
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, LinkedList};
+use std::convert::TryFrom;
 use std::env;
 use std::fs;
+use std::io;
+use std::rc::Rc;
 use config::Config;
 
 const CONFIG_ARG: &'static str = "config";
@@ -29,8 +34,38 @@ fn app() -> clap::App<'static, 'static> {
 }
 
 struct Context {
-    inputs: HashMap<String, Box<hwmon::Sensor>>,
-    outputs: HashMap<String, Box<hwmon::Fan>>,
+    inputs: HashMap<String, Rc<hwmon::Sensor>>,
+    outputs: RefCell<HashMap<String, Box<hwmon::Fan>>>,
+    rules: LinkedList<(LinkedList<String>, Box<rules::Rule>)>,
+    config: Config,
+}
+
+impl Context {
+    #[inline(always)]
+    fn interval(&self) -> std::time::Duration {
+        use std::time::Duration;
+        Duration::from_millis(self.config.interval)
+    }
+
+    fn run_once(&mut self) -> io::Result<()> {
+        for &(ref output_names, ref rule) in &self.rules {
+            let value = rule.get_value()?;
+            output_names.iter()
+                .map(|output_name| {
+                    self.outputs.borrow_mut().get_mut(output_name)
+                        .map(Ok)
+                        .unwrap_or_else(|| Err(io::Error::new(io::ErrorKind::Other, format!("Unknown output name: {}", output_name))))
+                        .and_then(|output| {
+                            output.enable()?;
+                            output.set_value(value)?;
+                            Ok(())
+                        })
+                })
+                .fold(Ok(()), Result::and)
+                .map(|_| ())?
+        }
+        Ok(())
+    }
 }
 
 impl From<Config> for Context {
@@ -38,33 +73,28 @@ impl From<Config> for Context {
         let mut inputs = HashMap::new();
         let mut outputs = HashMap::new();
         for (name, input_config) in config.inputs.iter() {
-            inputs.insert(name.clone(), input_config.initialize());
+            inputs.insert(name.clone(), Rc::from(input_config.initialize()));
         }
         for (name, output_config) in config.outputs.iter() {
             outputs.insert(name.clone(), output_config.initialize());
         }
+        let mut rules = LinkedList::new();
+        for rule_binding in config.rules.iter() {
+            use config::RuleType;
+            let rule: Box<rules::Rule> = rules::instantiate_rule(&rule_binding.rule, &inputs)
+                .expect("failed to parse rule");
+            rules.push_back((rule_binding.outputs.clone(), rule));
+        }
         Context {
             inputs: inputs,
-            outputs: outputs
+            outputs: RefCell::new(outputs),
+            rules: rules,
+            config: config,
         }
     }
 }
 
 fn main() {
-    //use hwmon::Fan;
-    //let mut fan = AmdgpuFan::new("/sys/class/drm/card0/device/hwmon/hwmon0", "fan1");
-
-    //let mut args = env::args().skip(1);
-    //let value: f64 = if let Some(arg) = args.next() {
-    //    arg.parse()
-    //        .expect("failed to parse value")
-    //} else {
-    //    1.0
-    //};
-    //fan.enable()
-    //    .expect("failed to enable fan");
-    //fan.set_value(value)
-    //    .expect("failed to set fan value");
     let matches = app().get_matches();
     let config_file_path = matches.value_of_os(CONFIG_ARG).unwrap();
     let config_file = fs::OpenOptions::new()
@@ -74,8 +104,11 @@ fn main() {
     let config: Config = serde_yaml::from_reader(config_file)
         .expect("failed to parse config file");
     println!("{:?}", &config);
-    let ctx = Context::from(config);
-    for (name, input) in ctx.inputs.iter() {
-        println!("{}: {:?}", name, input.get_value());
+    let mut ctx = Context::from(config);
+    loop {
+        use std::thread;
+        ctx.run_once()
+            .expect("failed to run fan updates");
+        thread::sleep(ctx.interval());
     }
 }

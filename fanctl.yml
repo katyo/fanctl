@@ -1,3 +1,4 @@
+interval: 1000
 inputs:
   gpu_temp:
     ty: HwmonSensor
@@ -9,3 +10,15 @@ outputs:
     args:
       path: /sys/class/drm/card0/device/hwmon/hwmon0
       prefix: fan1
+rules:
+  - outputs:
+      - gpu_fan
+    rule:
+      ty: Maximum
+      config:
+        - ty: GateCritical
+          config:
+            input: gpu_temp
+            value: 1.0
+        - ty: Static
+          config: 0.95
