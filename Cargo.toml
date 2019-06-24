@@ -8,6 +8,8 @@ description = "Fancontrol replacement in Rust with YAML configuration"
 documentation = "https://docs.rs/fanctl"
 homepage = "https://github.com/mcoffin/fanctl"
 repository = "https://github.com/mcoffin/fanctl"
+exclude = [ "fanctl.yml" ]
+keywords = [ "fancontrol", "fan", "sysfs", "hwmon" ]
 
 [dependencies]
 clap = "2"
