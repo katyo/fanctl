@@ -2,6 +2,10 @@
 
 `fanctl` is a replacement for `fancontrol` from `lm_sensors` meant to have a more fine-grained control interface in its config file.
 
+## Motivation
+
+`fancontrol`'s configuration is pretty cryptic, and controlling it is quite hard. [Rust](https://rust-lang.org) was chosen as the implementation language of choice due to the problems that can arise if the program controlling your fans crashes un-cleanly (potentially causing hardware to overheat).
+
 # Usage
 
 ```
@@ -11,6 +15,14 @@ fancl -c <CONFIG_FILE>
 # Configuration
 
 An example configuration file can be found at [`fanctl.yml`](https://github.com/mcoffin/fanctl/tree/master/fanctl.yml).
+
+More detailed information can be found in [the documentation](https://docs.rs/fanctl). The `config` module is a good place to start.
+
+Alternatively, if the online docs are out of date, or you are working on an un-released version, you can build the documentation locally with [`cargo`](https://crates.io).
+
+```
+cargo doc --no-deps
+```
 
 # License
 
