@@ -10,16 +10,20 @@ pub use rules::*;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
-    pub(crate) inputs: HashMap<String, Input>,
-    pub(crate) outputs: HashMap<String, Output>,
-    pub(crate) rules: LinkedList<RuleBinding>,
-    pub(crate) interval: u64,
+    /// Map of input names to input info
+    pub inputs: HashMap<String, Input>,
+    /// Map of output names to output info
+    pub outputs: HashMap<String, Output>,
+    /// List of rules, and the outputs that they should apply to
+    pub rules: LinkedList<RuleBinding>,
+    /// Interval, in milliseconds, to wait between iterations
+    pub interval: u64,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Input {
-    ty: InputType,
-    args: Value,
+    pub ty: InputType,
+    pub args: Value,
 }
 
 impl Input {
@@ -41,8 +45,8 @@ pub enum InputType {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Output {
-    ty: OutputType,
-    args: serde_yaml::Value,
+    pub ty: OutputType,
+    pub args: serde_yaml::Value,
 }
 
 impl Output {
@@ -70,17 +74,33 @@ pub enum OutputType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PwmFan {
-    pub(crate) path: String,
-    pub(crate) name: String,
+    /// Path to the containing `hwmon` directory.
+    ///
+    /// EX: `/sys/class/hwmon/hwmon0`
+    pub path: String,
+    /// Prefix for this fan
+    ///
+    /// EX: `pwm1` to use `pwm`, and `pwm1_enable` files.
+    pub name: String,
 }
 
+/// Fan type to use the on-board can speed controller from the
+/// `amdgpu` kernel driver
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AmdgpuFan {
-    pub(crate) path: String,
-    pub(crate) prefix: String,
+    /// Path to the containing `hwmon` directory.
+    ///
+    /// EX: `/sys/class/drm/card0/device/hwmon/hwmon0`
+    pub path: String,
+    /// Prefix for this fan instance
+    ///
+    /// EX: `fan1` to use `fan1_enable`, `fan1_crit`, etc.
+    pub prefix: String,
 }
 
+/// Configuration arguments for the `HwmonSensor` type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HwmonSensor {
-    pub(crate) path: String,
+    /// Path to the input file (ex: `/sys/class/hwmon/hwmon0/temp1_input`)
+    pub path: String,
 }
