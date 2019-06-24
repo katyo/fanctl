@@ -2,6 +2,9 @@ use std::io;
 use std::path::{ PathBuf, Path };
 use super::util;
 use util::ReadFileError;
+use std::convert::TryFrom;
+use serde_yaml::Value;
+use crate::config;
 
 fn convert_raw_value(raw_value: u64) -> f64 {
     (raw_value as f64) / 1000.0
@@ -25,7 +28,7 @@ pub struct HwmonSensor<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> HwmonSensor<P> {
-    pub fn new(path: P) -> Self {
+    fn new(path: P) -> Self {
         HwmonSensor {
             path: path,
         }
@@ -44,6 +47,14 @@ impl<P: AsRef<Path>> HwmonSensor<P> {
 
     pub fn read(&self) -> Result<u64, ReadFileError<u64>> {
         util::read_file_value(self.path.as_ref(), 8)
+    }
+}
+
+impl TryFrom<Value> for HwmonSensor<String> {
+    type Error = serde_yaml::Error;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let config: config::HwmonSensor = serde_yaml::from_value(value)?;
+        Ok(HwmonSensor::new(config.path))
     }
 }
 

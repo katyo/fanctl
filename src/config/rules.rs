@@ -19,7 +19,15 @@ pub enum RuleType {
     Static,
     Maximum,
     GateCritical,
+    GateStatic,
     Curve,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct GateStatic {
+    pub(crate) input: String,
+    pub(crate) threshold: f64,
+    pub(crate) value: f64,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

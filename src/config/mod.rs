@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use serde_yaml::Value;
 use std::collections::{HashMap, LinkedList};
+use std::convert::TryFrom;
 
 use super::hwmon;
 
@@ -18,24 +19,16 @@ pub struct Config {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Input {
     ty: InputType,
-    args: HashMap<String, Value>,
+    args: Value,
 }
 
 impl Input {
-    fn get_required(&self, arg: &str) -> &Value {
-        self.args.get(arg)
-            .expect(&format!("failed to get required arg: {}", arg))
-    }
-
     pub fn initialize(&self) -> Box<hwmon::Sensor> {
         match self.ty {
             InputType::HwmonSensor => {
-                let path = if let Value::String(ref s) = self.get_required("path") {
-                    s.clone()
-                } else {
-                    panic!("expected arg \"path\" to be a String");
-                };
-                Box::new(hwmon::HwmonSensor::new(path))
+                let sensor = hwmon::HwmonSensor::try_from(self.args.clone())
+                    .expect(&format!("failed to parse configuration for {:?}", self.ty));
+                Box::new(sensor)
             },
         }
     }
@@ -49,35 +42,45 @@ pub enum InputType {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Output {
     ty: OutputType,
-    args: HashMap<String, Value>,
+    args: serde_yaml::Value,
 }
 
 impl Output {
-    fn get_required(&self, arg: &str) -> &Value {
-        self.args.get(arg)
-            .expect(&format!("failed to get required arg: {}", arg))
-    }
-
     pub fn initialize(&self) -> Box<hwmon::Fan> {
         match self.ty {
             OutputType::AmdgpuFan => {
-                let path = if let Value::String(ref s) = self.get_required("path") {
-                    s
-                } else {
-                    panic!("expected argument \"path\" to be a String");
-                };
-                let prefix = if let Value::String(ref s) = self.get_required("prefix") {
-                    s
-                } else {
-                    panic!("expected argument \"prefix\" to be a String");
-                };
-                Box::new(hwmon::amdgpu::AmdgpuFan::new(path, prefix))
-            }
+                let fan = hwmon::amdgpu::AmdgpuFan::try_from(self.args.clone())
+                    .expect(&format!("failed to parse configuration for {:?}", self.ty));
+                Box::new(fan)
+            },
+            OutputType::PwmFan => {
+                let fan = hwmon::PwmFan::try_from(self.args.clone())
+                    .expect(&format!("failed to parse configuation for {:?}", self.ty));
+                Box::new(fan)
+            },
         }
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OutputType {
-    AmdgpuFan
+    AmdgpuFan,
+    PwmFan,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PwmFan {
+    pub(crate) path: String,
+    pub(crate) name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmdgpuFan {
+    pub(crate) path: String,
+    pub(crate) prefix: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HwmonSensor {
+    pub(crate) path: String,
 }

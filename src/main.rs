@@ -13,9 +13,11 @@ pub mod rules;
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
 use std::fs;
+use std::fmt;
 use std::io;
 use std::rc::Rc;
 use config::Config;
+use std::error;
 
 const CONFIG_ARG: &'static str = "config";
 
@@ -32,6 +34,83 @@ fn app() -> clap::App<'static, 'static> {
         .arg(config_arg)
 }
 
+#[derive(Debug)]
+struct FanUpdateError {
+    description: String,
+    error: io::Error,
+}
+
+impl FanUpdateError {
+    pub fn new<S: AsRef<str>>(output_name: S, error: io::Error) -> Self {
+        FanUpdateError {
+            description: format!("Error updating fan ({})", output_name.as_ref()),
+            error: error,
+        }
+    }
+}
+
+impl fmt::Display for FanUpdateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use error::Error;
+        let description = self.description();
+        let source = self.source();
+        if let Some(source) = source {
+            write!(f, "{}: {}", description, source)
+        } else {
+            write!(f, "{}", description)
+        }
+    }
+}
+
+impl error::Error for FanUpdateError {
+    fn description(&self) -> &str {
+        self.description.as_ref()
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+#[derive(Debug)]
+enum UpdateError {
+    Rule(io::Error),
+    Fan(FanUpdateError),
+}
+
+impl fmt::Display for UpdateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use error::Error;
+
+        let source = self.source();
+        let description = <Self as error::Error>::description(self);
+        if let Some(source) = source {
+            write!(f, "{}: {}", description, source)
+        } else {
+            write!(f, "{}", description)
+        }
+    }
+}
+
+impl error::Error for UpdateError {
+    fn description(&self) -> &str {
+        "Error updating fanctl graph"
+    }
+
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            &UpdateError::Rule(ref e) => Some(e),
+            &UpdateError::Fan(ref e) => Some(e),
+        }
+    }
+}
+
+impl From<FanUpdateError> for UpdateError {
+    fn from(e: FanUpdateError) -> Self {
+        UpdateError::Fan(e)
+    }
+}
+
 struct Context {
     _inputs: HashMap<String, Rc<hwmon::Sensor>>,
     outputs: RefCell<HashMap<String, Box<hwmon::Fan>>>,
@@ -46,9 +125,10 @@ impl Context {
         Duration::from_millis(self.config.interval)
     }
 
-    fn run_once(&mut self) -> io::Result<()> {
+    fn run_once(&mut self) -> Result<(), UpdateError> {
         for &(ref output_names, ref rule) in &self.rules {
-            let value = rule.get_value()?;
+            let value = rule.get_value()
+                .map_err(UpdateError::Rule)?;
             output_names.iter()
                 .map(|output_name| {
                     self.outputs.borrow_mut().get_mut(output_name)
@@ -59,6 +139,8 @@ impl Context {
                             output.set_value(value)?;
                             Ok(())
                         })
+                        .map_err(|e| FanUpdateError::new(output_name, e))
+                        .map_err(UpdateError::from)
                 })
                 .fold(Ok(()), Result::and)
                 .map(|_| ())?
@@ -105,11 +187,11 @@ fn print_license_info<Sp: AsRef<str>, Sa: AsRef<str>>(program_name: Sp, year: &s
 }
 
 #[allow(unused_must_use)]
-fn on_fan_update_error(e: io::Error) {
+fn on_fan_update_error<E: error::Error>(e: E) {
     use io::Write;
 
     let mut stderr = io::stderr();
-    writeln!(&mut stderr, "Error updating fans: {:?}", e);
+    writeln!(&mut stderr, "{}", e);
 }
 
 fn main() {

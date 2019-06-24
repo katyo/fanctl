@@ -2,11 +2,13 @@ use std::io;
 
 pub mod amdgpu;
 
+mod pwm;
 mod sensor;
 
 pub mod util;
 
 pub use sensor::{Sensor, HwmonSensor};
+pub use pwm::*;
 
 pub trait Fan {
     fn set_enabled(&mut self, enabled: bool) -> io::Result<()>;

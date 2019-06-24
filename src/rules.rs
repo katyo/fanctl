@@ -26,6 +26,7 @@ pub fn instantiate_rule(rule: &config::Rule, inputs: &HashMap<String, Rc<hwmon::
         RuleType::Static => Static::try_from(rule.config.as_ref().unwrap()).map(|r| Box::new(r) as Box<Rule>),
         RuleType::Maximum => Maximum::try_from((rule.config.as_ref().unwrap(), inputs)).map(|r| Box::new(r) as Box<Rule>),
         RuleType::GateCritical => GateCritical::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
+        RuleType::GateStatic => GateStatic::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
         RuleType::Curve => Curve::new(rule.config.as_ref().unwrap(), inputs).map(|r| Box::new(r) as Box<Rule>),
     };
     ret
@@ -137,6 +138,39 @@ impl MappingExt for serde_yaml::Mapping {
                 &Value::Number(ref n) => n.as_f64(),
                 _ => None,
             })
+    }
+}
+
+pub struct GateStatic {
+    input: Rc<hwmon::Sensor>,
+    threshold: f64,
+    value: f64,
+}
+
+impl GateStatic {
+    fn new(config: &Value, inputs: &HashMap<String, Rc<hwmon::Sensor>>) -> Result<Self, RuleParseError> {
+        let config: config::GateStatic = serde_yaml::from_value(config.clone())
+            .map_err(RuleParseError::Serde)?;
+        let input = inputs.get(&config.input)
+            .map(Clone::clone)
+            .map(Ok)
+            .unwrap_or_else(|| Err(RuleParseError::UnknownInput(config.input.clone())))?;
+        Ok(GateStatic {
+            input: input.clone(),
+            threshold: config.threshold,
+            value: config.value,
+        })
+    }
+}
+
+impl Rule for GateStatic {
+    fn get_value(&self) -> io::Result<f64> {
+        let value = self.input.get_value()?;
+        if value > self.threshold {
+            Ok(self.value)
+        } else {
+            Ok(0.0)
+        }
     }
 }
 

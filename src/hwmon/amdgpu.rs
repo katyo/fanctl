@@ -1,9 +1,12 @@
 use std::fs;
-use std::io::{self, BufReader};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::convert::TryFrom;
+use serde_yaml::Value;
 
 use super::Fan;
+use super::util::{ReadFileError, read_file_value};
+use crate::config;
 
 #[derive(Debug, Clone)]
 pub struct AmdgpuFan {
@@ -13,32 +16,16 @@ pub struct AmdgpuFan {
     max_path: PathBuf,
 }
 
-enum ReadFileError<P> {
-    Io(io::Error),
-    Parse(P),
-}
-
-fn read_file_value<F, P>(path: P) -> Result<F, ReadFileError<<F as FromStr>::Err>> where
-    F: FromStr,
-    P: AsRef<Path>,
-{
-    use io::BufRead;
-
-    let mut file = fs::OpenOptions::new()
-        .read(true)
-        .open(path.as_ref())
-        .map(BufReader::new)
-        .map_err(ReadFileError::Io)?;
-    let mut contents = String::with_capacity(8);
-    file.read_line(&mut contents)
-        .map_err(ReadFileError::Io)?;
-    let contents = contents.trim_end_matches("\n");
-    contents.trim().parse()
-        .map_err(ReadFileError::Parse)
+impl TryFrom<Value> for AmdgpuFan {
+    type Error = serde_yaml::Error;
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let config: config::AmdgpuFan = serde_yaml::from_value(value)?;
+        Ok(AmdgpuFan::new(config.path, config.prefix))
+    }
 }
 
 impl AmdgpuFan {
-    pub fn new<P: AsRef<Path>, S: AsRef<str>>(base_path: P, name: S) -> Self {
+    fn new<P: AsRef<Path>, S: AsRef<str>>(base_path: P, name: S) -> Self {
         let base_path = base_path.as_ref();
         let name = name.as_ref();
 
@@ -57,21 +44,21 @@ impl AmdgpuFan {
     }
 
     pub fn min(&self) -> io::Result<u64> {
-        read_file_value(&self.min_path).map_err(|e| match e {
+        read_file_value(&self.min_path, 8).map_err(|e| match e {
             ReadFileError::Io(e) => e,
             ReadFileError::Parse(e) => panic!("{:?}", e),
         })
     }
 
     pub fn max(&self) -> io::Result<u64> {
-        read_file_value(&self.max_path).map_err(|e| match e {
+        read_file_value(&self.max_path, 8).map_err(|e| match e {
             ReadFileError::Io(e) => e,
             ReadFileError::Parse(e) => panic!("{:?}", e),
         })
     }
 
     pub fn enabled(&self) -> io::Result<bool> {
-        read_file_value::<u8, _>(&self.enable_path)
+        read_file_value::<u8, _>(&self.enable_path, 8)
             .map(|v| v > 0)
             .map_err(|e| match e {
                 ReadFileError::Io(e) => e,
