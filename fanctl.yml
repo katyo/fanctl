@@ -10,11 +10,6 @@ outputs:
     args:
       path: /sys/class/drm/card0/device/hwmon/hwmon0
       prefix: fan1
-  cpu_fan:
-    ty: PwmFan
-    args:
-      path: /sys/class/hwmon/hwmon1
-      name: pwm1
 rules:
   - outputs:
       - gpu_fan
@@ -30,29 +25,6 @@ rules:
         - ty: Curve
           config:
             input: gpu_temp
-            keys:
-              - input: 0.0
-                output: 0.0
-              - input: 30.0
-                output: 0.5
-              - input: 50.0
-                output: 0.9
-              - input: 70
-                output: 1.0
-  - outputs: ["cpu_fan"]
-    rule:
-      ty: Maximum
-      config:
-        - ty: GateStatic
-          config:
-            input: cpu_temp
-            threshold: 60.0
-            value: 1.0
-        - ty: Static
-          config: 0.33
-        - ty: Curve
-          config:
-            input: cpu_temp
             keys:
               - input: 0.0
                 output: 0.0

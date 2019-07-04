@@ -16,6 +16,11 @@ pub struct AmdgpuFan {
     max_path: PathBuf,
 }
 
+pub enum InitializationError {
+    Serde(serde_yaml::Error),
+    Io(io::Error),
+}
+
 impl TryFrom<Value> for AmdgpuFan {
     type Error = serde_yaml::Error;
     fn try_from(value: Value) -> Result<Self, Self::Error> {

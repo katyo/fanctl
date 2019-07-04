@@ -1,5 +1,8 @@
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate log;
+extern crate env_logger;
 extern crate serde;
 extern crate serde_yaml;
 extern crate splines;
@@ -186,17 +189,15 @@ fn print_license_info<Sp: AsRef<str>, Sa: AsRef<str>>(program_name: Sp, year: &s
     println!("{} Copyright (C) {} {}", program_name.as_ref(), year, author.as_ref());
 }
 
-#[allow(unused_must_use)]
 fn on_fan_update_error<E: error::Error>(e: E) {
-    use io::Write;
-
-    let mut stderr = io::stderr();
-    writeln!(&mut stderr, "{}", e);
+    error!("{}", e);
 }
 
 fn main() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+
+    env_logger::init();
 
     let matches = app().get_matches();
     let config_file_path = matches.value_of_os(CONFIG_ARG).unwrap();
@@ -225,8 +226,8 @@ fn main() {
         }
         thread::sleep(ctx.interval());
     }
-    println!("Shutting down, disabling control on all outputs.");
+    info!("Shutting down, disabling control on all outputs.");
     ctx.disable_outputs()
         .expect("failed to shutdown outputs");
-    println!("Shutdown successful.");
+    info!("Shutdown successful.");
 }

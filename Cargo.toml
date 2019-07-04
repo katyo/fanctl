@@ -16,6 +16,8 @@ clap = "2"
 serde_yaml = "0.8"
 splines = "1.0.0-rc.3"
 ctrlc = "3"
+env_logger = "0.6"
+log = "0.4"
 
 [dependencies.serde]
 version = "1.0"
