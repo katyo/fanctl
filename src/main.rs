@@ -12,6 +12,7 @@ mod clap_ext;
 pub mod hwmon;
 pub mod config;
 pub mod rules;
+pub mod metrics;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
@@ -21,6 +22,7 @@ use std::io;
 use std::rc::Rc;
 use config::Config;
 use std::error;
+use metrics::OutputMetricsTracker;
 
 const CONFIG_ARG: &'static str = "config";
 
@@ -117,7 +119,7 @@ impl From<FanUpdateError> for UpdateError {
 struct Context {
     _inputs: HashMap<String, Rc<hwmon::Sensor>>,
     outputs: RefCell<HashMap<String, Box<hwmon::Fan>>>,
-    rules: LinkedList<(LinkedList<String>, Box<rules::Rule>)>,
+    rules: LinkedList<(LinkedList<String>, RefCell<OutputMetricsTracker>, Box<rules::Rule>)>,
     config: Config,
 }
 
@@ -129,9 +131,19 @@ impl Context {
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        for &(ref output_names, ref rule) in &self.rules {
+        let mut idx: usize = 0;
+        for &(ref output_names, ref tracker, ref rule) in &self.rules {
             let value = rule.get_value()
                 .map_err(UpdateError::Rule)?;
+            {
+                let mut tracker = tracker.borrow_mut();
+                tracker.update(value);
+                if tracker.count() >= self.config.log_iterations {
+                    info!("Average value for rule ({}): {}", idx, tracker.average());
+                    tracker.reset();
+                }
+                idx += 1;
+            }
             output_names.iter()
                 .map(|output_name| {
                     self.outputs.borrow_mut().get_mut(output_name)
@@ -173,7 +185,8 @@ impl From<Config> for Context {
         for rule_binding in config.rules.iter() {
             let rule: Box<rules::Rule> = rules::instantiate_rule(&rule_binding.rule, &inputs)
                 .expect("failed to parse rule");
-            rules.push_back((rule_binding.outputs.clone(), rule));
+            let tracker = RefCell::new(OutputMetricsTracker::new());
+            rules.push_back((rule_binding.outputs.clone(), tracker, rule));
         }
         Context {
             _inputs: inputs,
