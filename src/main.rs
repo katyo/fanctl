@@ -7,6 +7,7 @@ extern crate serde;
 extern crate serde_yaml;
 extern crate splines;
 extern crate ctrlc;
+extern crate combination_err;
 
 mod clap_ext;
 pub mod hwmon;
@@ -14,6 +15,7 @@ pub mod config;
 pub mod rules;
 pub mod metrics;
 
+use combination_err::combination_err;
 use std::cell::RefCell;
 use std::collections::{HashMap, LinkedList};
 use std::fs;
@@ -77,43 +79,15 @@ impl error::Error for FanUpdateError {
     }
 }
 
+#[combination_err(
+    "Error updating fanctl graph",
+    "Error updating rule",
+    "Error updating fan"
+)]
 #[derive(Debug)]
 enum UpdateError {
     Rule(io::Error),
     Fan(FanUpdateError),
-}
-
-impl fmt::Display for UpdateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use error::Error;
-
-        let source = self.source();
-        let description = <Self as error::Error>::description(self);
-        if let Some(source) = source {
-            write!(f, "{}: {}", description, source)
-        } else {
-            write!(f, "{}", description)
-        }
-    }
-}
-
-impl error::Error for UpdateError {
-    fn description(&self) -> &str {
-        "Error updating fanctl graph"
-    }
-
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            &UpdateError::Rule(ref e) => Some(e),
-            &UpdateError::Fan(ref e) => Some(e),
-        }
-    }
-}
-
-impl From<FanUpdateError> for UpdateError {
-    fn from(e: FanUpdateError) -> Self {
-        UpdateError::Fan(e)
-    }
 }
 
 struct Context {

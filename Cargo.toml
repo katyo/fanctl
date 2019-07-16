@@ -1,6 +1,6 @@
 [package]
 name = "fanctl"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Matt Coffin <mcoffin13@gmail.com>"]
 edition = "2018"
 license = "GPL-3.0"
@@ -22,3 +22,6 @@ log = "0.4"
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
+
+[dependencies.combination-err]
+git = "https://gitlab.com/mcoffin/combination-err.git"
