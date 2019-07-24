@@ -138,8 +138,11 @@ impl Context {
     }
 
     fn disable_outputs(&mut self) -> io::Result<()> {
-        for output in self.outputs.borrow_mut().values_mut() {
-            output.disable()?;
+        let results: Vec<_> = self.outputs.borrow_mut().values_mut()
+            .map(|output| output.close())
+            .collect();
+        for close_result in results.into_iter() {
+            close_result?;
         }
         Ok(())
     }
@@ -203,7 +206,7 @@ fn main() {
     let r = running.clone();
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
-    }).expect("Error settting SIGTERM handler");
+    }).expect("Error setting SIGTERM handler");
     while running.load(Ordering::SeqCst) {
         use std::thread;
 

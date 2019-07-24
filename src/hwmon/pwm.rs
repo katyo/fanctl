@@ -111,6 +111,10 @@ impl<P: AsRef<Path>> Fan for PwmFan<P> {
         let raw_value: u8 = (value * 255.0) as u8;
         self.set_value_pwm(raw_value)
     }
+
+    fn close(&mut self) -> io::Result<()> {
+        self.set_enabled_pwm(self.initial_state)
+    }
 }
 
 #[derive(Debug)]

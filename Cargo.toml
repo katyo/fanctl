@@ -15,10 +15,13 @@ keywords = [ "fancontrol", "fan", "sysfs", "hwmon" ]
 clap = "2"
 serde_yaml = "0.8"
 splines = "1.0.0-rc.3"
-ctrlc = "3"
 env_logger = "0.6"
 log = "0.4"
 combination-err = "^0.1.1"
+
+[dependencies.ctrlc]
+version = "3"
+features = ["termination"]
 
 [dependencies.serde]
 version = "1.0"
