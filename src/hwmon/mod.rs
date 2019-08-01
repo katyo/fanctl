@@ -13,6 +13,7 @@ pub use pwm::*;
 pub trait Fan {
     fn set_enabled(&mut self, enabled: bool) -> io::Result<()>;
     fn set_value(&mut self, value: f64) -> io::Result<()>;
+    fn close(&mut self) -> io::Result<()>;
 
     #[inline(always)]
     fn enable(&mut self) -> io::Result<()> {

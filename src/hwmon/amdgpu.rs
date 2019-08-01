@@ -109,4 +109,12 @@ impl Fan for AmdgpuFan {
         };
         self.set_target(target)
     }
+
+    fn close(&mut self) -> io::Result<()> {
+        use io::Write;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&self.enable_path)
+            .and_then(|mut f| write!(f, "0"))
+    }
 }
