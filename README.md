@@ -8,6 +8,18 @@
 
 # Usage
 
+## Building
+
+`fanctl` is built with [`cargo`](https://crates.io), the package manager and build system for Rust crates.
+
+```
+cargo build --release
+```
+
+The built binary will be in `target/release/fanctl`.
+
+## Running
+
 ```
 fancl -c <CONFIG_FILE>
 ```
