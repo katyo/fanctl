@@ -19,7 +19,7 @@ pub struct Config {
     /// Interval, in milliseconds, to wait between iterations
     pub interval: u64,
     /// Log interval, in number of `iterations`
-    pub log_iterations: usize,
+    pub log_iterations: Option<usize>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

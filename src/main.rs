@@ -112,7 +112,9 @@ impl Context {
             {
                 let mut tracker = tracker.borrow_mut();
                 tracker.update(value);
-                if tracker.count() >= self.config.log_iterations {
+                if self.config.log_iterations.is_none() {
+                    tracker.reset();
+                } else if self.config.log_iterations.into_iter().filter(|&v| tracker.count() >= v).next().is_some() {
                     info!("Average value for rule ({}): {}", idx, tracker.average());
                     tracker.reset();
                 }
