@@ -2,10 +2,7 @@ use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::io;
 use super::{util, Fan};
-use crate::config;
 use std::fs;
-use std::convert::TryFrom;
-use serde_yaml::Value;
 
 #[derive(Debug, Copy, Clone)]
 pub enum PwmEnableState {
@@ -114,36 +111,5 @@ impl<P: AsRef<Path>> Fan for PwmFan<P> {
 
     fn close(&mut self) -> io::Result<()> {
         self.set_enabled_pwm(self.initial_state)
-    }
-}
-
-#[derive(Debug)]
-pub enum PwmFanInitializationError {
-    Io(io::Error),
-    Parse(serde_yaml::Error),
-}
-
-impl From<io::Error> for PwmFanInitializationError {
-    fn from(e: io::Error) -> Self {
-        PwmFanInitializationError::Io(e)
-    }
-}
-
-impl From<serde_yaml::Error> for PwmFanInitializationError {
-    fn from(e: serde_yaml::Error) -> Self {
-        PwmFanInitializationError::Parse(e)
-    }
-}
-
-impl TryFrom<Value> for PwmFan<String> {
-    type Error = PwmFanInitializationError;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let (path, name) = {
-            let config: config::PwmFan = serde_yaml::from_value(value)
-                .map_err(PwmFanInitializationError::from)?;
-            (config.path, config.name)
-        };
-        PwmFan::new(path, name)
-            .map_err(From::from)
     }
 }

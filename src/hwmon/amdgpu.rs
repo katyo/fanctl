@@ -2,11 +2,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::convert::TryFrom;
-use serde_yaml::Value;
 
 use super::Fan;
 use super::util::{ReadFileError, read_file_value};
-use crate::config;
 
 #[derive(Debug, Clone)]
 pub struct AmdgpuFan {
@@ -21,16 +19,8 @@ pub enum InitializationError {
     Io(io::Error),
 }
 
-impl TryFrom<Value> for AmdgpuFan {
-    type Error = serde_yaml::Error;
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let config: config::AmdgpuFan = serde_yaml::from_value(value)?;
-        Ok(AmdgpuFan::new(config.path, config.prefix))
-    }
-}
-
 impl AmdgpuFan {
-    fn new<P: AsRef<Path>, S: AsRef<str>>(base_path: P, name: S) -> Self {
+    pub fn new<P: AsRef<Path>, S: AsRef<str>>(base_path: P, name: S) -> Self {
         let base_path = base_path.as_ref();
         let name = name.as_ref();
 
