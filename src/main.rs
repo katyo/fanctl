@@ -6,8 +6,8 @@ extern crate env_logger;
 extern crate serde;
 extern crate serde_yaml;
 extern crate splines;
-extern crate ctrlc;
 extern crate combination_err;
+extern crate signal_hook;
 
 mod clap_ext;
 pub mod hwmon;
@@ -23,7 +23,14 @@ use std::fs;
 use std::fmt;
 use std::io;
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{
+    Arc,
+    Mutex,
+    atomic::{
+        AtomicBool,
+        Ordering,
+    },
+};
 use config::Config;
 use std::error;
 use metrics::OutputMetricsTracker;
@@ -204,10 +211,18 @@ fn on_fan_update_error<E: error::Error>(e: E) {
     error!("{}", e);
 }
 
-fn main() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
+    let signals = [
+        signal_hook::SIGINT,
+        signal_hook::SIGTERM,
+    ];
+    for &s in &signals {
+        signal_hook::flag::register(s, flag.clone())?;
+    }
+    Ok(())
+}
 
+fn main() {
     env_logger::init();
 
     let matches = app().get_matches();
@@ -224,12 +239,11 @@ fn main() {
 
     print_license_info(crate_name!(), "2019", crate_authors!());
 
-    let running = Arc::new(AtomicBool::new(true));
+    let running = Arc::new(AtomicBool::new(false));
+    setup_exit_handlers(&running)
+        .expect("Failed to set up exit handlers");
     let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    }).expect("Error setting SIGTERM handler");
-    while running.load(Ordering::SeqCst) {
+    while !running.load(Ordering::SeqCst) {
         use std::thread;
 
         if let Err(e) = program.run_once() {

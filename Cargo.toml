@@ -18,10 +18,11 @@ splines = "1.0.0-rc.3"
 env_logger = "0.6"
 log = "0.4"
 combination-err = "^0.1.1"
+signal-hook = "0.1"
 
-[dependencies.ctrlc]
-version = "3"
-features = ["termination"]
+# [dependencies.ctrlc]
+# version = "3"
+# features = ["termination"]
 
 [dependencies.serde]
 version = "1.0"
