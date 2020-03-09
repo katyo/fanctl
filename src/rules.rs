@@ -1,13 +1,10 @@
-use serde_yaml::Value;
-use std::convert::TryFrom;
 use std::io;
-use super::{config, hwmon};
-use std::collections::{HashMap, LinkedList};
+use super::hwmon;
+use std::collections::LinkedList;
 use std::cmp::PartialOrd;
 use std::rc::Rc;
 use splines::Spline;
 use crate::config::{
-    RuleBinding,
     Rule as RuleConfig,
     CurvePoint,
 };
@@ -24,7 +21,7 @@ pub enum RuleConfigError {
 
 pub fn rule_from_config<F>(config: &RuleConfig, get_input: F) -> Result<Box<dyn Rule>, RuleConfigError>
 where
-    F: Fn(&String) -> Option<Rc<hwmon::Sensor>> + Copy,
+    F: Fn(&String) -> Option<Rc<dyn hwmon::Sensor>> + Copy,
 {
     let ret: Box<dyn Rule> = match config {
         &RuleConfig::Static(v) => Box::new(Static(v)),
@@ -69,7 +66,7 @@ impl Rule for Static {
 }
 
 pub struct Maximum {
-    rules: LinkedList<Box<Rule>>,
+    rules: LinkedList<Box<dyn Rule>>,
 }
 
 fn partial_max<V: PartialOrd + Copy>(fst: V, snd: V) -> V {
@@ -96,13 +93,13 @@ impl Rule for Maximum {
     }
 }
 
-pub struct GateStatic<S: AsRef<hwmon::Sensor>> {
+pub struct GateStatic<S: AsRef<dyn hwmon::Sensor>> {
     input: S,
     threshold: f64,
     value: f64,
 }
 
-impl<S: AsRef<hwmon::Sensor>> GateStatic<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> GateStatic<S> {
     #[inline]
     pub fn new(input: S, threshold: f64, value: f64) -> Self {
         GateStatic {
@@ -113,7 +110,7 @@ impl<S: AsRef<hwmon::Sensor>> GateStatic<S> {
     }
 }
 
-impl<S: AsRef<hwmon::Sensor>> Rule for GateStatic<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> Rule for GateStatic<S> {
     fn get_value(&self) -> io::Result<f64> {
         let input = self.input.as_ref();
         let value = input.get_value()?;
@@ -125,12 +122,12 @@ impl<S: AsRef<hwmon::Sensor>> Rule for GateStatic<S> {
     }
 }
 
-pub struct GateCritical<S: AsRef<hwmon::Sensor>> {
+pub struct GateCritical<S: AsRef<dyn hwmon::Sensor>> {
     input: S,
     value: f64,
 }
 
-impl<S: AsRef<hwmon::Sensor>> GateCritical<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> GateCritical<S> {
     #[inline]
     pub fn new(input: S, value: f64) -> Self {
         GateCritical {
@@ -140,7 +137,7 @@ impl<S: AsRef<hwmon::Sensor>> GateCritical<S> {
     }
 }
 
-impl<S: AsRef<hwmon::Sensor>> Rule for GateCritical<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> Rule for GateCritical<S> {
     fn get_value(&self) -> io::Result<f64> {
         let input = self.input.as_ref();
         let threshold = input.get_critical()?;
@@ -153,13 +150,13 @@ impl<S: AsRef<hwmon::Sensor>> Rule for GateCritical<S> {
     }
 }
 
-pub struct Curve<S: AsRef<hwmon::Sensor>> {
+pub struct Curve<S: AsRef<dyn hwmon::Sensor>> {
     input: S,
     spline: Spline<f64, f64>,
     out_of_bounds_value: f64,
 }
 
-impl<S: AsRef<hwmon::Sensor>> Curve<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> Curve<S> {
     pub fn new<It>(input: S, points: It, out_of_bounds_value: Option<f64>) -> Self
     where
         It: Iterator<Item=CurvePoint>,
@@ -188,7 +185,7 @@ impl<S: AsRef<hwmon::Sensor>> Curve<S> {
     }
 }
 
-impl<S: AsRef<hwmon::Sensor>> Rule for Curve<S> {
+impl<S: AsRef<dyn hwmon::Sensor>> Rule for Curve<S> {
     fn get_value(&self) -> io::Result<f64> {
         let input = self.input.as_ref();
         let value = input.get_value()?;

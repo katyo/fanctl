@@ -2,7 +2,6 @@ use std::io;
 use std::path::{ PathBuf, Path };
 use super::util;
 use util::ReadFileError;
-use std::convert::TryFrom;
 
 fn convert_raw_value(raw_value: u64) -> f64 {
     (raw_value as f64) / 1000.0

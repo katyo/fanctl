@@ -1,7 +1,5 @@
 use serde::{Serialize, Deserialize};
-use serde_yaml::Value;
 use std::collections::{HashMap, LinkedList};
-use std::convert::TryFrom;
 
 use super::hwmon;
 

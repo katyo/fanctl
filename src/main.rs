@@ -16,8 +16,7 @@ pub mod rules;
 pub mod metrics;
 
 use combination_err::combination_err;
-use std::cell::RefCell;
-use std::collections::{HashMap, LinkedList};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs;
 use std::fmt;
@@ -33,7 +32,6 @@ use std::sync::{
 };
 use config::Config;
 use std::error;
-use metrics::OutputMetricsTracker;
 use rules::Rule;
 
 const CONFIG_ARG: &'static str = "config";
@@ -177,7 +175,6 @@ impl FanControlProgram {
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        let mut idx = 0usize;
         for rule in self.rules.iter_mut() {
             rule.update()
                 .map_err(|e| FanUpdateError::new("", e))
@@ -242,7 +239,6 @@ fn main() {
     let running = Arc::new(AtomicBool::new(false));
     setup_exit_handlers(&running)
         .expect("Failed to set up exit handlers");
-    let r = running.clone();
     while !running.load(Ordering::SeqCst) {
         use std::thread;
 

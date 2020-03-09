@@ -1,7 +1,6 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::convert::TryFrom;
 
 use super::Fan;
 use super::util::{ReadFileError, read_file_value};
