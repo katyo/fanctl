@@ -1,13 +1,12 @@
 use serde::{Serialize, Deserialize};
-use serde_yaml::Value;
 use std::collections::{HashMap, LinkedList};
-use std::convert::TryFrom;
 
 use super::hwmon;
 
 mod rules;
 pub use rules::*;
 
+/// Root config struct created from the config file
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// Map of input names to input info
@@ -22,87 +21,49 @@ pub struct Config {
     pub log_iterations: Option<usize>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Input {
-    pub ty: InputType,
-    pub args: Value,
+/// Defines an input sensor
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Input {
+    /// Standard hwmon input sensor
+    HwmonSensor {
+        path: String,
+    },
 }
 
-impl Input {
-    pub fn initialize(&self) -> Box<hwmon::Sensor> {
-        match self.ty {
-            InputType::HwmonSensor => {
-                let sensor = hwmon::HwmonSensor::try_from(self.args.clone())
-                    .expect(&format!("failed to parse configuration for {:?}", self.ty));
-                Box::new(sensor)
-            },
+impl<'a> Into<Box<dyn hwmon::Sensor>> for &'a Input {
+    fn into(self) -> Box<dyn hwmon::Sensor> {
+        match self {
+            Input::HwmonSensor { path } => Box::new(hwmon::HwmonSensor::new(path.clone())),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub enum InputType {
-    HwmonSensor
+/// Defines an output fan
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Output {
+    /// Standard `hwmon` pwm fan
+    PwmFan {
+        path: String,
+        name: String,
+    },
+    /// AMDGPU fuzzy fan
+    AmdgpuFan {
+        path: String,
+        prefix: String,
+    },
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Output {
-    pub ty: OutputType,
-    pub args: serde_yaml::Value,
-}
-
-impl Output {
-    pub fn initialize(&self) -> Box<hwmon::Fan> {
-        match self.ty {
-            OutputType::AmdgpuFan => {
-                let fan = hwmon::amdgpu::AmdgpuFan::try_from(self.args.clone())
-                    .expect(&format!("failed to parse configuration for {:?}", self.ty));
+impl<'a> Into<Box<dyn hwmon::Fan>> for &'a Output {
+    fn into(self) -> Box<dyn hwmon::Fan> {
+        match self {
+            &Output::PwmFan { ref path, ref name } => {
+                let fan = hwmon::PwmFan::new(path.clone(), name.clone())
+                    .expect("Failed to create PwmFan");
                 Box::new(fan)
             },
-            OutputType::PwmFan => {
-                let fan = hwmon::PwmFan::try_from(self.args.clone())
-                    .expect(&format!("failed to parse configuation for {:?}", self.ty));
-                Box::new(fan)
+            &Output::AmdgpuFan { ref path, ref prefix } => {
+                Box::new(hwmon::amdgpu::AmdgpuFan::new(path, prefix))
             },
         }
     }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub enum OutputType {
-    AmdgpuFan,
-    PwmFan,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PwmFan {
-    /// Path to the containing `hwmon` directory.
-    ///
-    /// EX: `/sys/class/hwmon/hwmon0`
-    pub path: String,
-    /// Prefix for this fan
-    ///
-    /// EX: `pwm1` to use `pwm`, and `pwm1_enable` files.
-    pub name: String,
-}
-
-/// Fan type to use the on-board can speed controller from the
-/// `amdgpu` kernel driver
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AmdgpuFan {
-    /// Path to the containing `hwmon` directory.
-    ///
-    /// EX: `/sys/class/drm/card0/device/hwmon/hwmon0`
-    pub path: String,
-    /// Prefix for this fan instance
-    ///
-    /// EX: `fan1` to use `fan1_enable`, `fan1_crit`, etc.
-    pub prefix: String,
-}
-
-/// Configuration arguments for the `HwmonSensor` type
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HwmonSensor {
-    /// Path to the input file (ex: `/sys/class/hwmon/hwmon0/temp1_input`)
-    pub path: String,
 }

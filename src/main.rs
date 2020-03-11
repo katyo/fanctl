@@ -6,8 +6,8 @@ extern crate env_logger;
 extern crate serde;
 extern crate serde_yaml;
 extern crate splines;
-extern crate ctrlc;
 extern crate combination_err;
+extern crate signal_hook;
 
 mod clap_ext;
 pub mod hwmon;
@@ -16,15 +16,23 @@ pub mod rules;
 pub mod metrics;
 
 use combination_err::combination_err;
-use std::cell::RefCell;
-use std::collections::{HashMap, LinkedList};
+use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fs;
 use std::fmt;
 use std::io;
 use std::rc::Rc;
+use std::sync::{
+    Arc,
+    Mutex,
+    atomic::{
+        AtomicBool,
+        Ordering,
+    },
+};
 use config::Config;
 use std::error;
-use metrics::OutputMetricsTracker;
+use rules::Rule;
 
 const CONFIG_ARG: &'static str = "config";
 
@@ -90,89 +98,104 @@ enum UpdateError {
     Fan(FanUpdateError),
 }
 
-struct Context {
-    _inputs: HashMap<String, Rc<hwmon::Sensor>>,
-    outputs: RefCell<HashMap<String, Box<hwmon::Fan>>>,
-    rules: LinkedList<(LinkedList<String>, RefCell<OutputMetricsTracker>, Box<rules::Rule>)>,
+struct BoundRule {
+    outputs: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>>,
+    rule: Box<dyn Rule>,
+}
+
+impl BoundRule {
+    #[inline]
+    fn new(outputs: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>>, rule: Box<dyn Rule>) -> BoundRule {
+        BoundRule {
+            outputs: outputs,
+            rule: rule,
+        }
+    }
+
+    fn update(&mut self) -> io::Result<f64> {
+        let value = self.rule.get_value()?;
+        for output in &self.outputs {
+            let mut output = output.lock().unwrap();
+            output.enable()?;
+            output.set_value(value)?;
+        }
+        Ok(value)
+    }
+}
+
+struct FanControlProgram {
+    rules: Vec<BoundRule>,
     config: Config,
 }
 
-impl Context {
-    #[inline(always)]
+impl TryFrom<Config> for FanControlProgram {
+    type Error = String;
+
+    fn try_from(config: Config) -> Result<FanControlProgram, String> {
+        let inputs: HashMap<String, Rc<dyn hwmon::Sensor>> = config.inputs.iter()
+            .map(|(name, input_config)| {
+                let input: Box<dyn hwmon::Sensor> = input_config.into();
+                (name.clone(), Rc::from(input))
+            })
+            .collect();
+        let outputs: HashMap<String, Rc<Mutex<Box<dyn hwmon::Fan>>>> = config.outputs.iter()
+            .map(|(name, output_config)| {
+                let output: Box<dyn hwmon::Fan> = output_config.into();
+                (name.clone(), Mutex::new(output))
+            })
+            .map(|(name, output)| (name, Rc::new(output)))
+            .collect();
+        let mut rules: Vec<BoundRule> = Vec::with_capacity(config.rules.len());
+        for rule_binding in config.rules.iter() {
+            let rule = rules::rule_from_config(&rule_binding.rule, |name| inputs.get(name).map(Clone::clone))
+                .map_err(|e| format!("{:?}", e))?;
+            let mut os: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>> = Vec::with_capacity(rule_binding.outputs.len());
+            for output_name in rule_binding.outputs.iter() {
+                let output = outputs.get(output_name)
+                    .map(Clone::clone)
+                    .map(Ok)
+                    .unwrap_or_else(|| Err(rules::RuleConfigError::UnknownOutput(output_name.clone())))
+                    .map_err(|e| format!("{:?}", e))?;
+                os.push(output);
+            }
+            rules.push(BoundRule::new(os, rule));
+        }
+        Ok(FanControlProgram {
+            rules: rules,
+            config: config,
+        })
+    }
+}
+
+impl FanControlProgram {
+    #[inline]
     fn interval(&self) -> std::time::Duration {
         use std::time::Duration;
         Duration::from_millis(self.config.interval)
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        let mut idx: usize = 0;
-        for &(ref output_names, ref tracker, ref rule) in &self.rules {
-            let value = rule.get_value()
-                .map_err(UpdateError::Rule)?;
-            {
-                let mut tracker = tracker.borrow_mut();
-                tracker.update(value);
-                if self.config.log_iterations.is_none() {
-                    tracker.reset();
-                } else if self.config.log_iterations.into_iter().filter(|&v| tracker.count() >= v).next().is_some() {
-                    info!("Average value for rule ({}): {}", idx, tracker.average());
-                    tracker.reset();
-                }
-                idx += 1;
-            }
-            output_names.iter()
-                .map(|output_name| {
-                    self.outputs.borrow_mut().get_mut(output_name)
-                        .map(Ok)
-                        .unwrap_or_else(|| Err(io::Error::new(io::ErrorKind::Other, format!("Unknown output name: {}", output_name))))
-                        .and_then(|output| {
-                            output.enable()?;
-                            output.set_value(value)?;
-                            Ok(())
-                        })
-                        .map_err(|e| FanUpdateError::new(output_name, e))
-                        .map_err(UpdateError::from)
-                })
-                .fold(Ok(()), Result::and)
-                .map(|_| ())?
+        for rule in self.rules.iter_mut() {
+            rule.update()
+                .map_err(|e| FanUpdateError::new("", e))
+                .map_err(UpdateError::from)?;
         }
         Ok(())
     }
 
     fn disable_outputs(&mut self) -> io::Result<()> {
-        let results: Vec<_> = self.outputs.borrow_mut().values_mut()
-            .map(|output| output.close())
-            .collect();
-        for close_result in results.into_iter() {
-            close_result?;
-        }
-        Ok(())
-    }
-}
-
-impl From<Config> for Context {
-    fn from(config: Config) -> Self {
-        let mut inputs = HashMap::new();
-        let mut outputs = HashMap::new();
-        for (name, input_config) in config.inputs.iter() {
-            inputs.insert(name.clone(), Rc::from(input_config.initialize()));
-        }
-        for (name, output_config) in config.outputs.iter() {
-            outputs.insert(name.clone(), output_config.initialize());
-        }
-        let mut rules = LinkedList::new();
-        for rule_binding in config.rules.iter() {
-            let rule: Box<rules::Rule> = rules::instantiate_rule(&rule_binding.rule, &inputs)
-                .expect("failed to parse rule");
-            let tracker = RefCell::new(OutputMetricsTracker::new());
-            rules.push_back((rule_binding.outputs.clone(), tracker, rule));
-        }
-        Context {
-            _inputs: inputs,
-            outputs: RefCell::new(outputs),
-            rules: rules,
-            config: config,
-        }
+        self.rules.iter_mut()
+            .map(|r| {
+                r.outputs.iter_mut()
+                    .map(|o| {
+                        use io::ErrorKind;
+                        o.try_lock()
+                            .map_err(|_| io::Error::new(ErrorKind::Other, "Failed to lock mutex for output!"))
+                            .and_then(|mut o| o.close())
+                    })
+                    .fold(Ok(()), Result::and)
+            })
+            .fold(Ok(()), Result::and)
     }
 }
 
@@ -185,10 +208,18 @@ fn on_fan_update_error<E: error::Error>(e: E) {
     error!("{}", e);
 }
 
-fn main() {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
+    let signals = [
+        signal_hook::SIGINT,
+        signal_hook::SIGTERM,
+    ];
+    for &s in &signals {
+        signal_hook::flag::register(s, flag.clone())?;
+    }
+    Ok(())
+}
 
+fn main() {
     env_logger::init();
 
     let matches = app().get_matches();
@@ -200,26 +231,25 @@ fn main() {
     let config: Config = serde_yaml::from_reader(config_file)
         .expect("failed to parse config file");
 
-    let mut ctx = Context::from(config);
+    let mut program = FanControlProgram::try_from(config)
+        .expect("Failed to initialize");
 
     print_license_info(crate_name!(), "2019", crate_authors!());
 
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    }).expect("Error setting SIGTERM handler");
-    while running.load(Ordering::SeqCst) {
+    let running = Arc::new(AtomicBool::new(false));
+    setup_exit_handlers(&running)
+        .expect("Failed to set up exit handlers");
+    while !running.load(Ordering::SeqCst) {
         use std::thread;
 
-        if let Err(e) = ctx.run_once() {
+        if let Err(e) = program.run_once() {
             on_fan_update_error(e);
             break;
         }
-        thread::sleep(ctx.interval());
+        thread::sleep(program.interval());
     }
     info!("Shutting down, disabling control on all outputs.");
-    ctx.disable_outputs()
+    program.disable_outputs()
         .expect("failed to shutdown outputs");
     info!("Shutdown successful.");
 }
