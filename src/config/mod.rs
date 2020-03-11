@@ -6,6 +6,7 @@ use super::hwmon;
 mod rules;
 pub use rules::*;
 
+/// Root config struct created from the config file
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     /// Map of input names to input info
@@ -20,8 +21,10 @@ pub struct Config {
     pub log_iterations: Option<usize>,
 }
 
+/// Defines an input sensor
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Input {
+    /// Standard hwmon input sensor
     HwmonSensor {
         path: String,
     },
@@ -35,12 +38,15 @@ impl<'a> Into<Box<dyn hwmon::Sensor>> for &'a Input {
     }
 }
 
+/// Defines an output fan
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Output {
+    /// Standard `hwmon` pwm fan
     PwmFan {
         path: String,
         name: String,
     },
+    /// AMDGPU fuzzy fan
     AmdgpuFan {
         path: String,
         prefix: String,
