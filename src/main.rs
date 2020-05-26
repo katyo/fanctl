@@ -8,12 +8,14 @@ extern crate serde_yaml;
 extern crate splines;
 extern crate combination_err;
 extern crate signal_hook;
+extern crate regex;
 
 mod clap_ext;
 pub mod hwmon;
 pub mod config;
 pub mod rules;
 pub mod metrics;
+pub(crate) mod path_ext;
 
 use combination_err::combination_err;
 use std::collections::HashMap;
