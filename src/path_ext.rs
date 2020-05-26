@@ -51,7 +51,7 @@ impl PathExt for Path {
                     real_path.push(component);
                 }
             } else {
-                debug!("There were no wildcards in path: \"{}\"", self.display());
+                debug!("There were no wildcards in path component: \"{}\"", component_s);
                 // There were no wildcards, so just append the component directly
                 real_path.push(component);
             }
