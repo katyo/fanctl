@@ -69,12 +69,11 @@ impl FanUpdateError {
 impl fmt::Display for FanUpdateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use error::Error;
-        let description = self.description();
         let source = self.source();
         if let Some(source) = source {
-            write!(f, "{}: {}", description, source)
+            write!(f, "{}: {}", &self.description, source)
         } else {
-            write!(f, "{}", description)
+            write!(f, "{}", &self.description)
         }
     }
 }
