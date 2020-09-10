@@ -30,9 +30,10 @@ An example configuration file can be found at [`fanctl.yml`](https://gitlab.com/
 
 More detailed information can be found in [the documentation](https://docs.rs/fanctl). The `config` module is a good place to start.
 
-Alternatively, if the online docs are out of date, or you are working on an un-released version, you can build the documentation locally with [`cargo`](https://crates.io).
+You can build the documentation locally with [`cargo`](https://crates.io).
 
-```
+```bash
+# Will build documentation in target/doc
 cargo doc --no-deps
 ```
 
