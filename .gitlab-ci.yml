@@ -1,5 +1,12 @@
 image: "rust:1"
 
-build:
+stages:
+  - build
+
+test:
+  stage: build
+  only:
+    - master
+    - merge_requests
   script:
     - cargo test --release
