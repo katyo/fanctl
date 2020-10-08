@@ -6,49 +6,60 @@ extern crate env_logger;
 extern crate serde;
 extern crate serde_yaml;
 extern crate splines;
-extern crate combination_err;
 extern crate signal_hook;
 extern crate regex;
+extern crate thiserror;
 
-mod clap_ext;
 pub mod hwmon;
 pub mod config;
 pub mod rules;
 pub mod metrics;
 pub(crate) mod path_ext;
 
-use combination_err::combination_err;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fs;
-use std::fmt;
-use std::io;
-use std::rc::Rc;
-use std::sync::{
-    Arc,
-    Mutex,
-    atomic::{
-        AtomicBool,
-        Ordering,
+use clap::Clap;
+use std:: {
+    collections::HashMap,
+    convert::TryFrom,
+    fmt,
+    io,
+    path::{
+        Path,
+        PathBuf,
     },
+    rc::Rc,
+    sync::{
+        Arc,
+        Mutex,
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+    },
+    error,
 };
-use config::Config;
-use std::error;
+use config::{
+    Config,
+    ConfigError,
+};
 use rules::Rule;
+use serde_yaml::Error as YamlError;
 
-const CONFIG_ARG: &'static str = "config";
+#[derive(Debug, Clap)]
+#[clap(version = crate_version!(), author = crate_authors!())]
+pub struct Options {
+    #[clap(short, long, value_name = "CONFIG_FILE", about = "Config file path", parse(from_os_str))]
+    config: PathBuf,
+}
 
-fn app() -> clap::App<'static, 'static> {
-    use clap::Arg;
-    let config_arg = Arg::with_name(CONFIG_ARG)
-        .short("c")
-        .long("config")
-        .help("Config filename")
-        .takes_value(true)
-        .value_name("CONFIG_FILE")
-        .required(true);
-    clap_ext::crate_app()
-        .arg(config_arg)
+impl Options {
+    #[inline(always)]
+    pub fn config_path(&self) -> &Path {
+        self.config.as_ref()
+    }
+
+    pub fn config(&self) -> Result<Config, ConfigError<YamlError>> {
+        config::read_config_yaml(&self.config)
+    }
 }
 
 #[derive(Debug)]
@@ -88,15 +99,12 @@ impl error::Error for FanUpdateError {
     }
 }
 
-#[combination_err(
-    "Error updating fanctl graph",
-    "Error updating rule",
-    "Error updating fan"
-)]
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum UpdateError {
-    Rule(io::Error),
-    Fan(FanUpdateError),
+    #[error("Error updating rule")]
+    Rule(#[from] io::Error),
+    #[error("Error updating fan")]
+    Fan(#[from] FanUpdateError),
 }
 
 struct BoundRule {
@@ -223,14 +231,9 @@ fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
 fn main() {
     env_logger::init();
 
-    let matches = app().get_matches();
-    let config_file_path = matches.value_of_os(CONFIG_ARG).unwrap();
-    let config_file = fs::OpenOptions::new()
-        .read(true)
-        .open(config_file_path)
-        .expect("failed to open config file");
-    let config: Config = serde_yaml::from_reader(config_file)
-        .expect("failed to parse config file");
+    let options = Options::parse();
+    let config: Config = options.config()
+        .expect("failed to get config");
 
     let mut program = FanControlProgram::try_from(config)
         .expect("Failed to initialize");

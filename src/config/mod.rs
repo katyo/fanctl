@@ -4,6 +4,12 @@ use std::collections::{HashMap, LinkedList};
 use super::hwmon;
 
 mod rules;
+pub mod error;
+pub use error::{
+    ConfigError,
+    read_config,
+    read_config_yaml,
+};
 pub use rules::*;
 
 /// Root config struct created from the config file
