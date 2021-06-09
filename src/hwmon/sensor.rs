@@ -74,22 +74,32 @@ impl<P: AsRef<Path>> Sensor for HwmonSensor<P> {
     }
 }
 
-/// Search for a hwmon input by name and label
-pub fn search_input(name: &str, label: &str) -> io::Result<Option<PathBuf>> {
+/// Search for a hwmon device by name
+pub fn search_hwmon(name: &str) -> io::Result<Option<PathBuf>> {
     for hwmon in PathBuf::from("/sys/class/hwmon")
         .read_dir()?
         .filter_map(|r| r.ok())
     {
-        if read_to_string(hwmon.path().join("name"))?.trim() == name {
-            for file in hwmon.path().read_dir()?.filter_map(|r| r.ok()) {
-                let path = file.path();
-                if let Some(path_str) = path.as_os_str().to_str() {
-                    if path_str.ends_with("label") {
-                        if read_to_string(&path)?.trim() == label {
-                            let input = format!("{}input", path_str.trim_end_matches("label"));
-                            debug!("found hwmon input {}/{} at {}", name, label, input);
-                            return Ok(Some(input.into()));
-                        }
+        let path = hwmon.path();
+        if read_to_string(path.join("name"))?.trim() == name {
+            debug!("found hwmon {} at {}", name, path.to_string_lossy());
+            return Ok(Some(path))
+        }
+    }
+    Ok(None)
+}
+
+/// Search for a hwmon input by name and label
+pub fn search_input(name: &str, label: &str) -> io::Result<Option<PathBuf>> {
+    if let Some(hwmon) = search_hwmon(name)? {
+        for file in hwmon.read_dir()?.filter_map(|r| r.ok()) {
+            let path = file.path();
+            if let Some(path_str) = path.as_os_str().to_str() {
+                if path_str.ends_with("label") {
+                    if read_to_string(&path)?.trim() == label {
+                        let input = format!("{}input", path_str.trim_end_matches("label"));
+                        debug!("found hwmon input {}/{} at {}", name, label, input);
+                        return Ok(Some(input.into()));
                     }
                 }
             }
