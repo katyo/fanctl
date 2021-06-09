@@ -7,7 +7,7 @@ mod sensor;
 
 pub mod util;
 
-pub use sensor::{Sensor, HwmonSensor};
+pub use sensor::{search_input, HwmonSensor, Sensor};
 pub use pwm::*;
 
 pub trait Fan {

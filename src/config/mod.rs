@@ -11,6 +11,7 @@ pub use error::{
     read_config_yaml,
 };
 pub use rules::*;
+use std::path::PathBuf;
 
 /// Root config struct created from the config file
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -31,15 +32,31 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Input {
     /// Standard hwmon input sensor
-    HwmonSensor {
-        path: String,
-    },
+    HwmonSensor(HwmonSensor),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum HwmonSensor {
+    Path { path: PathBuf },
+    Search { name: String, label: String },
+}
+
+impl HwmonSensor {
+    pub fn path(&self) -> PathBuf {
+        match self {
+            HwmonSensor::Path { path } => path.clone(),
+            HwmonSensor::Search { name, label } => hwmon::search_input(name, label)
+                .expect("Error while searching hwmon input")
+                .expect("No hwmon match found"),
+        }
+    }
 }
 
 impl<'a> Into<Box<dyn hwmon::Sensor>> for &'a Input {
     fn into(self) -> Box<dyn hwmon::Sensor> {
         match self {
-            Input::HwmonSensor { path } => Box::new(hwmon::HwmonSensor::new(path.clone())),
+            Input::HwmonSensor(sensor) => Box::new(hwmon::HwmonSensor::new(sensor.path())),
         }
     }
 }
