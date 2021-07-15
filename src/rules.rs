@@ -13,9 +13,11 @@ pub trait Rule {
     fn get_value(&self) -> io::Result<f64>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RuleConfigError {
+    #[error("Unknown input: {0}")]
     UnknownInput(String),
+    #[error("Unknown output: {0}")]
     UnknownOutput(String),
 }
 

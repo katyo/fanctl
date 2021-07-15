@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate log;
@@ -10,17 +9,23 @@ extern crate signal_hook;
 extern crate regex;
 extern crate thiserror;
 
+mod logging;
 pub mod hwmon;
 pub mod config;
 pub mod rules;
 pub mod metrics;
 pub(crate) mod path_ext;
 
-use clap::Clap;
+use clap::{
+    Clap,
+    crate_version,
+    crate_authors,
+    crate_name,
+};
 use std:: {
     collections::HashMap,
     convert::TryFrom,
-    fmt,
+    error::Error,
     io,
     path::{
         Path,
@@ -62,49 +67,12 @@ impl Options {
     }
 }
 
-#[derive(Debug)]
-struct FanUpdateError {
-    description: String,
-    error: io::Error,
-}
-
-impl FanUpdateError {
-    pub fn new<S: AsRef<str>>(output_name: S, error: io::Error) -> Self {
-        FanUpdateError {
-            description: format!("Error updating fan ({})", output_name.as_ref()),
-            error: error,
-        }
-    }
-}
-
-impl fmt::Display for FanUpdateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use error::Error;
-        let source = self.source();
-        if let Some(source) = source {
-            write!(f, "{}: {}", &self.description, source)
-        } else {
-            write!(f, "{}", &self.description)
-        }
-    }
-}
-
-impl error::Error for FanUpdateError {
-    fn description(&self) -> &str {
-        self.description.as_ref()
-    }
-
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        Some(&self.error)
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 enum UpdateError {
-    #[error("Error updating rule")]
-    Rule(#[from] io::Error),
-    #[error("Error updating fan")]
-    Fan(#[from] FanUpdateError),
+    #[error("Error updating rule: {0}")]
+    Rule(io::Error),
+    #[error("Error updating fan: {0}")]
+    FanIo(io::Error),
 }
 
 struct BoundRule {
@@ -121,13 +89,20 @@ impl BoundRule {
         }
     }
 
-    fn update(&mut self) -> io::Result<f64> {
-        let value = self.rule.get_value()?;
+    fn enable_and_set_all(&mut self, value: f64) -> io::Result<f64> {
         for output in &self.outputs {
             let mut output = output.lock().unwrap();
             output.enable()?;
             output.set_value(value)?;
         }
+        Ok(value)
+    }
+
+    fn update(&mut self) -> Result<f64, UpdateError> {
+        let value = self.rule.get_value()
+            .map_err(UpdateError::Rule)?;
+        self.enable_and_set_all(value)
+            .map_err(UpdateError::FanIo)?;
         Ok(value)
     }
 }
@@ -138,9 +113,9 @@ struct FanControlProgram {
 }
 
 impl TryFrom<Config> for FanControlProgram {
-    type Error = String;
+    type Error = rules::RuleConfigError;
 
-    fn try_from(config: Config) -> Result<FanControlProgram, String> {
+    fn try_from(config: Config) -> Result<FanControlProgram, Self::Error> {
         let inputs: HashMap<String, Rc<dyn hwmon::Sensor>> = config.inputs.iter()
             .map(|(name, input_config)| {
                 let input: Box<dyn hwmon::Sensor> = input_config.into();
@@ -156,15 +131,13 @@ impl TryFrom<Config> for FanControlProgram {
             .collect();
         let mut rules: Vec<BoundRule> = Vec::with_capacity(config.rules.len());
         for rule_binding in config.rules.iter() {
-            let rule = rules::rule_from_config(&rule_binding.rule, |name| inputs.get(name).map(Clone::clone))
-                .map_err(|e| format!("{:?}", e))?;
+            let rule = rules::rule_from_config(&rule_binding.rule, |name| inputs.get(name).map(Clone::clone))?;
             let mut os: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>> = Vec::with_capacity(rule_binding.outputs.len());
             for output_name in rule_binding.outputs.iter() {
                 let output = outputs.get(output_name)
                     .map(Clone::clone)
                     .map(Ok)
-                    .unwrap_or_else(|| Err(rules::RuleConfigError::UnknownOutput(output_name.clone())))
-                    .map_err(|e| format!("{:?}", e))?;
+                    .unwrap_or_else(|| Err(rules::RuleConfigError::UnknownOutput(output_name.clone())))?;
                 os.push(output);
             }
             rules.push(BoundRule::new(os, rule));
@@ -184,12 +157,8 @@ impl FanControlProgram {
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        for rule in self.rules.iter_mut() {
-            rule.update()
-                .map_err(|e| FanUpdateError::new("", e))
-                .map_err(UpdateError::from)?;
-        }
-        Ok(())
+        self.rules.iter_mut()
+            .fold(Ok(()), |r, rule| r.and_then(move |_| rule.update().map(|_| ())))
     }
 
     fn disable_outputs(&mut self) -> io::Result<()> {
@@ -228,21 +197,14 @@ fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn main() {
-    env_logger::init();
-
-    let options = Options::parse();
-    let config: Config = options.config()
-        .expect("failed to get config");
-
-    let mut program = FanControlProgram::try_from(config)
-        .expect("Failed to initialize");
+fn real_main(options: &Options) -> Result<(), Box<dyn Error>> {
+    let config: Config = options.config()?;
+    let mut program = FanControlProgram::try_from(config)?;
 
     print_license_info(crate_name!(), "2019", crate_authors!());
 
     let running = Arc::new(AtomicBool::new(false));
-    setup_exit_handlers(&running)
-        .expect("Failed to set up exit handlers");
+    setup_exit_handlers(&running)?;
     while !running.load(Ordering::SeqCst) {
         use std::thread;
 
@@ -253,7 +215,15 @@ fn main() {
         thread::sleep(program.interval());
     }
     info!("Shutting down, disabling control on all outputs.");
-    program.disable_outputs()
-        .expect("failed to shutdown outputs");
+    program.disable_outputs()?;
     info!("Shutdown successful.");
+    Ok(())
+}
+
+fn main() {
+    logging::init();
+    let options = Options::parse();
+    if let Err(e) = real_main(&options) {
+        error!("{}", &e);
+    }
 }
