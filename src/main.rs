@@ -114,6 +114,8 @@ impl BoundRule {
 enum ProgramError {
     #[error("Error finding sensor {0}: {1}")]
     FindSensor(String, config::FindHwmonError),
+    #[error("Error finding fan {0}: {1}")]
+    FindFan(String, config::FindHwmonError),
     #[error("Error in rule configuration: {0}")]
     RuleConfig(#[from] rules::RuleConfigError),
 }
@@ -136,13 +138,15 @@ impl TryFrom<Config> for FanControlProgram {
             }?;
             inputs.insert(name, Rc::from(sensor));
         }
-        let outputs: HashMap<String, Rc<Mutex<Box<dyn hwmon::Fan>>>> = config.outputs.iter()
-            .map(|(name, output_config)| {
-                let output: Box<dyn hwmon::Fan> = output_config.into();
-                (name.clone(), Mutex::new(output))
-            })
-            .map(|(name, output)| (name, Rc::new(output)))
-            .collect();
+        let mut outputs: HashMap<String, Rc<Mutex<Box<dyn hwmon::Fan>>>> = HashMap::new();
+        for (name, output_config) in config.outputs.iter() {
+            let name = name.clone();
+            let (name, fan): (String, Box<dyn hwmon::Fan>) = match output_config.try_into() {
+                Ok(fan) => Ok((name, fan)),
+                Err(e) => Err(ProgramError::FindFan(name, e)),
+            }?;
+            outputs.insert(name, Rc::new(Mutex::new(fan)));
+        }
         let mut rules: Vec<BoundRule> = Vec::with_capacity(config.rules.len());
         for rule_binding in config.rules.iter() {
             let rule = rules::rule_from_config(&rule_binding.rule, |name| inputs.get(name).map(Clone::clone))?;

@@ -44,31 +44,29 @@ fn pwm_enable_state(enabled: bool) -> PwmEnableState {
 const ENABLE_PATH: &'static str = "enable";
 
 pub struct PwmFan<P: AsRef<Path>> {
-    _base_path: P,
     name: String,
     initial_state: PwmEnableState,
-    real_path: PathBuf,
+    real_path: P,
 }
 
 impl<P: AsRef<Path>> PwmFan<P> {
+    #[inline(always)]
+    pub fn real_path(&self) -> &Path {
+        self.real_path.as_ref()
+    }
+
     pub fn new(base_path: P, name: String) -> io::Result<Self> {
-        use crate::path_ext::PathExt;
-        let real_path = base_path.as_ref()
-            .expand_wildcards()
-            .ok()
-            .unwrap_or_else(|| PathBuf::from(base_path.as_ref()));
         let mut ret = PwmFan {
-            _base_path: base_path,
             name: name,
             initial_state: PwmEnableState::Disabled,
-            real_path: real_path,
+            real_path: base_path,
         };
         ret.initial_state = ret.enabled()?;
         Ok(ret)
     }
 
     fn get_path(&self, component: Option<&str>) -> PathBuf {
-        let mut path = self.real_path.clone();
+        let mut path = self.real_path().to_owned();
         let component = component.filter(|s| s.len() > 0);
         let filename = component
             .map(|c| Cow::Owned(format!("{}_{}", &self.name, c)))

@@ -112,26 +112,32 @@ pub enum FanHwmon {
 }
 
 impl FanHwmon {
-    pub fn path(&self) -> PathBuf {
+    pub fn path<'a>(&'a self) -> Result<PathBuf, FindHwmonError> {
         match self {
-            FanHwmon::Path { path } => path.clone(),
-            FanHwmon::Search { hwmon } => hwmon::search_hwmon(hwmon)
-                .expect("Error while searching hwmon")
-                .expect(&format!{"No hwmon match found for '{}'", hwmon}),
+            &FanHwmon::Path { ref path } => {
+                use crate::path_ext::PathExt;
+                path.expand_wildcards().map_err(FindHwmonError::from)
+            },
+            &FanHwmon::Search { ref hwmon } => hwmon::search_hwmon(hwmon)
+                .map_err(FindHwmonError::from)
+                .and_then(|v| v.map(Ok).unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}", hwmon)))))
         }
     }
 }
 
-impl<'a> Into<Box<dyn hwmon::Fan>> for &'a Output {
-    fn into(self) -> Box<dyn hwmon::Fan> {
+impl<'a> TryInto<Box<dyn hwmon::Fan>> for &'a Output {
+    type Error = FindHwmonError;
+
+    fn try_into(self) -> Result<Box<dyn hwmon::Fan>, Self::Error> {
         match self {
             &Output::PwmFan { ref hwmon, ref name } => {
-                let fan = hwmon::PwmFan::new(hwmon.path(), name.clone())
-                    .expect("Failed to create PwmFan");
-                Box::new(fan)
+                let fan = hwmon::PwmFan::new(hwmon.path()?, name.clone())?;
+                Ok(Box::new(fan))
             },
             &Output::AmdgpuFan { ref hwmon, ref prefix } => {
-                Box::new(hwmon::amdgpu::AmdgpuFan::new(hwmon.path(), prefix))
+                let fan = hwmon.path()
+                    .map(|path| hwmon::amdgpu::AmdgpuFan::new(path, prefix))?;
+                Ok(Box::new(fan))
             },
         }
     }

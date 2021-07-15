@@ -20,10 +20,7 @@ pub enum InitializationError {
 
 impl AmdgpuFan {
     pub fn new<P: AsRef<Path>, S: AsRef<str>>(base_path: P, name: S) -> Self {
-        use crate::path_ext::PathExt;
-        let base_path: &Path = &base_path.as_ref()
-            .expand_wildcards()
-            .expect("Failed to expand wildcards in path");
+        let base_path = base_path.as_ref();
         let name = name.as_ref();
 
         let make_path = |filename: &str| {
