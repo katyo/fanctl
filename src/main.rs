@@ -24,7 +24,10 @@ use clap::{
 };
 use std:: {
     collections::HashMap,
-    convert::TryFrom,
+    convert::{
+        TryFrom,
+        TryInto,
+    },
     error::Error,
     io,
     path::{
@@ -107,21 +110,32 @@ impl BoundRule {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+enum ProgramError {
+    #[error("Error finding sensor {0}: {1}")]
+    FindSensor(String, config::FindHwmonError),
+    #[error("Error in rule configuration: {0}")]
+    RuleConfig(#[from] rules::RuleConfigError),
+}
+
 struct FanControlProgram {
     rules: Vec<BoundRule>,
     config: Config,
 }
 
 impl TryFrom<Config> for FanControlProgram {
-    type Error = rules::RuleConfigError;
+    type Error = ProgramError;
 
     fn try_from(config: Config) -> Result<FanControlProgram, Self::Error> {
-        let inputs: HashMap<String, Rc<dyn hwmon::Sensor>> = config.inputs.iter()
-            .map(|(name, input_config)| {
-                let input: Box<dyn hwmon::Sensor> = input_config.into();
-                (name.clone(), Rc::from(input))
-            })
-            .collect();
+        let mut inputs: HashMap<String, Rc<dyn hwmon::Sensor>> = HashMap::new();
+        for (name, input_config) in config.inputs.iter() {
+            let name = name.clone();
+            let (name, sensor): (String, Box<dyn hwmon::Sensor>) = match input_config.try_into() {
+                Ok(sensor) => Ok((name, sensor)),
+                Err(e) => Err(ProgramError::FindSensor(name, e)),
+            }?;
+            inputs.insert(name, Rc::from(sensor));
+        }
         let outputs: HashMap<String, Rc<Mutex<Box<dyn hwmon::Fan>>>> = config.outputs.iter()
             .map(|(name, output_config)| {
                 let output: Box<dyn hwmon::Fan> = output_config.into();

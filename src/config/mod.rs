@@ -1,5 +1,4 @@
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, LinkedList};
 
 use super::hwmon;
 
@@ -11,7 +10,17 @@ pub use error::{
     read_config_yaml,
 };
 pub use rules::*;
-use std::path::PathBuf;
+use std::{
+    collections::{
+        HashMap,
+        LinkedList,
+    },
+    convert::{
+        TryInto,
+    },
+    io,
+    path::PathBuf,
+};
 
 /// Root config struct created from the config file
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -35,6 +44,14 @@ pub enum Input {
     HwmonSensor(HwmonSensor),
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum FindHwmonError {
+    #[error("Error searching for hwmon component: {0}")]
+    Io(#[from] io::Error),
+    #[error("No hwmon component found for search: {0}")]
+    NotFound(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum HwmonSensor {
@@ -43,20 +60,29 @@ pub enum HwmonSensor {
 }
 
 impl HwmonSensor {
-    pub fn path(&self) -> PathBuf {
+    pub fn path(&self) -> Result<PathBuf, FindHwmonError> {
         match self {
-            HwmonSensor::Path { path } => path.clone(),
+            HwmonSensor::Path { path } => {
+                use crate::path_ext::PathExt;
+                path.expand_wildcards().map_err(FindHwmonError::from)
+            },
             HwmonSensor::Search { hwmon, label } => hwmon::search_input(hwmon, label)
-                .expect("Error while searching hwmon input")
-                .expect(&format!{"No hwmon match found for '{}/{}'", hwmon, label}),
+                .map_err(FindHwmonError::from)
+                .and_then(|v| v.map(Ok).unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label))))),
         }
     }
 }
 
-impl<'a> Into<Box<dyn hwmon::Sensor>> for &'a Input {
-    fn into(self) -> Box<dyn hwmon::Sensor> {
+impl<'a> TryInto<Box<dyn hwmon::Sensor>> for &'a Input {
+    type Error = FindHwmonError;
+
+    fn try_into(self) -> Result<Box<dyn hwmon::Sensor>, Self::Error> {
         match self {
-            Input::HwmonSensor(sensor) => Box::new(hwmon::HwmonSensor::new(sensor.path())),
+            Input::HwmonSensor(sensor) => {
+                let ret = sensor.path()
+                    .map(hwmon::HwmonSensor::new)?;
+                Ok(Box::new(ret))
+            },
         }
     }
 }

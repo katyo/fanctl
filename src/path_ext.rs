@@ -7,9 +7,6 @@ use std::{
         PathBuf,
     },
 };
-use log::{
-    debug,
-};
 
 const WILDCARD_CHAR: char = '*';
 
@@ -24,7 +21,7 @@ impl PathExt for Path {
             let component_s = component.to_str().unwrap();
             let mut wildcards = component_s.matches(WILDCARD_CHAR).peekable();
             if let Some(_) = wildcards.peek() {
-                debug!("Found wildcard component: {:?}", component_s);
+                trace!("Found wildcard component: {:?}", component_s);
                 let r = {
                     let pattern = format!("^{}$", component_s.replace(WILDCARD_CHAR, ".*"));
                     Regex::new(&pattern)
@@ -51,7 +48,7 @@ impl PathExt for Path {
                     real_path.push(component);
                 }
             } else {
-                debug!("There were no wildcards in path component: \"{}\"", component_s);
+                trace!("There were no wildcards in path component: \"{}\"", component_s);
                 // There were no wildcards, so just append the component directly
                 real_path.push(component);
             }

@@ -26,11 +26,10 @@ pub struct HwmonSensor<P: AsRef<Path>> {
 }
 
 impl HwmonSensor<PathBuf> {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        use crate::path_ext::PathExt;
-        let path = path.as_ref();
+    #[inline(always)]
+    pub fn new<P: Into<PathBuf>>(p: P) -> Self {
         HwmonSensor {
-            path: path.expand_wildcards().expect("Failed to expand wildcards in path"),
+            path: p.into(),
         }
     }
 }
