@@ -1,12 +1,12 @@
-image: "rust:1"
-
 stages:
   - build
-
 test:
   stage: build
+  image: rust:1-alpine
   only:
     - master
     - merge_requests
+  before_script:
+    - apk add --update gcc musl-dev
   script:
     - cargo test --release
