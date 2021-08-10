@@ -195,11 +195,6 @@ impl FanControlProgram {
     }
 }
 
-#[inline(never)]
-fn print_license_info<Sp: AsRef<str>, Sa: AsRef<str>>(program_name: Sp, year: &str, author: Sa) {
-    println!("{} Copyright (C) {} {}", program_name.as_ref(), year, author.as_ref());
-}
-
 fn on_fan_update_error<E: error::Error>(e: E) {
     error!("{}", e);
 }
@@ -218,8 +213,6 @@ fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
 fn real_main(options: &Options) -> Result<(), Box<dyn Error>> {
     let config: Config = options.config()?;
     let mut program = FanControlProgram::try_from(config)?;
-
-    print_license_info(crate_name!(), "2019", crate_authors!());
 
     let running = Arc::new(AtomicBool::new(false));
     setup_exit_handlers(&running)?;
