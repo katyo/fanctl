@@ -27,6 +27,10 @@ pub enum Rule {
         keys: Vec<CurvePoint>,
         out_of_bounds_value: Option<f64>,
     },
+    Smooth {
+        rule: Box<Rule>,
+        samples: usize
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]

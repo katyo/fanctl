@@ -3,6 +3,7 @@ use super::hwmon;
 use std::collections::LinkedList;
 use std::cmp::PartialOrd;
 use std::rc::Rc;
+use std::cell::RefCell;
 use splines::Spline;
 use crate::config::{
     Rule as RuleConfig,
@@ -55,6 +56,10 @@ where
                 .unwrap_or_else(|| Err(RuleConfigError::UnknownInput(input.clone())))?;
             Box::new(Curve::new(input, keys.iter().map(|&p| p), out_of_bounds_value))
         },
+        &RuleConfig::Smooth { ref rule, samples } => {
+            let r = rule_from_config(rule, get_input)?;
+            Box::new(Smooth::new(r, samples))
+        }
     };
     Ok(ret)
 }
@@ -94,6 +99,64 @@ impl Rule for Maximum {
             .unwrap_or(Err(io::Error::new(io::ErrorKind::Other, "No inputs available for \"Maximum\" rule")))
     }
 }
+
+pub struct Smooth {
+    rule: Box<dyn Rule>,
+    samples: usize,
+    buffer: RefCell<Vec<f64>>
+}
+
+impl Smooth {
+    #[inline]
+    pub fn new(rule: Box<dyn Rule>, samples: usize) -> Self {
+        Smooth {
+            rule: rule,
+            samples: samples,
+            buffer: RefCell::new(Vec::with_capacity(samples))
+        }
+    }
+
+    fn add_value(&self, value: f64) {
+        let mut buffer = self.buffer.borrow_mut();
+        buffer.push(value);
+        if buffer.len() > self.samples {
+            buffer.remove(0);
+        }
+    }
+
+    fn get_smoothed(&self) -> Option<f64> {
+        let mut values = self.buffer.borrow().clone();
+        let len = values.len();
+        if len == 0 {
+            return None
+        }
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut cut = len / 5;
+        if len > 2 {
+            cut = std::cmp::max(1, cut);
+        }
+        let cut_values = &values[cut..len-cut];
+        let mut avg = 0.;
+        for i in cut_values {
+            avg += i;
+        }
+        avg /= (len-2*cut) as f64;
+        Some(avg)
+    }
+}
+
+impl Rule for Smooth {
+    fn get_value(&self) -> io::Result<f64> {
+        let value = self.rule.get_value()?;
+        self.add_value(value);
+
+        match self.get_smoothed() {
+            Some(value) => Ok(value),
+            None => Err(io::Error::new(io::ErrorKind::Other, "No input data"))
+        }
+    }
+}
+
 
 pub struct GateStatic<S: AsRef<dyn hwmon::Sensor>> {
     input: S,
