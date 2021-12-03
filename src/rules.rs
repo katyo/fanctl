@@ -125,12 +125,13 @@ impl Smooth {
     }
 
     fn get_smoothed(&self) -> Option<f64> {
+        use std::cmp::Ordering;
         let mut values = self.buffer.borrow().clone();
         let len = values.len();
         if len == 0 {
             return None
         }
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
         let mut cut = len / 5;
         if len > 2 {
             cut = std::cmp::max(1, cut);
