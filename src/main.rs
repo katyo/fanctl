@@ -17,10 +17,9 @@ pub mod metrics;
 pub(crate) mod path_ext;
 
 use clap::{
-    Clap,
+    Parser,
     crate_version,
     crate_authors,
-    crate_name,
 };
 use std:: {
     collections::HashMap,
@@ -52,7 +51,7 @@ use config::{
 use rules::Rule;
 use serde_yaml::Error as YamlError;
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 #[clap(version = crate_version!(), author = crate_authors!())]
 pub struct Options {
     #[clap(short, long, value_name = "CONFIG_FILE", about = "Config file path", parse(from_os_str))]
