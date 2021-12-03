@@ -2,7 +2,7 @@
 name = "fanctl"
 version = "0.5.1"
 authors = ["Matt Coffin <mcoffin13@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "GPL-3.0"
 description = "Fancontrol replacement in Rust with YAML configuration"
 documentation = "https://docs.rs/fanctl"
@@ -12,7 +12,7 @@ exclude = [ "fanctl.yml", ".gitlab-ci.yml" ]
 keywords = [ "fancontrol", "fan", "sysfs", "hwmon" ]
 
 [dependencies]
-clap = "3.0.0-beta.2"
+clap = "3.0.0-beta.5"
 serde_yaml = "0.8"
 splines = "1.0.0-rc.3"
 env_logger = "0.6"
