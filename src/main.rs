@@ -54,7 +54,7 @@ use serde_yaml::Error as YamlError;
 #[derive(Debug, Parser)]
 #[clap(version = crate_version!(), author = crate_authors!())]
 pub struct Options {
-    #[clap(short, long, value_name = "CONFIG_FILE", about = "Config file path", parse(from_os_str))]
+    #[clap(short, long, value_name = "CONFIG_FILE", help = "Config file path", parse(from_os_str))]
     config: PathBuf,
 }
 

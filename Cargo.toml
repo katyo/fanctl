@@ -12,7 +12,6 @@ exclude = [ "fanctl.yml", ".gitlab-ci.yml" ]
 keywords = [ "fancontrol", "fan", "sysfs", "hwmon" ]
 
 [dependencies]
-clap = "3.0.0-beta.5"
 serde_yaml = "0.8"
 splines = "1.0.0-rc.3"
 env_logger = "0.6"
@@ -24,3 +23,7 @@ thiserror = "1.0"
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
+
+[dependencies.clap]
+version = "3.0.0-rc.0"
+features = ["derive", "cargo"]
