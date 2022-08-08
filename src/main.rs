@@ -231,9 +231,6 @@ fn real_main(options: &Options) -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
-    logging::init();
     let options = Options::parse();
-    if let Err(e) = real_main(&options) {
-        error!("{}", &e);
-    }
+    logging::run_main(|| real_main(&options));
 }

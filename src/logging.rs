@@ -1,6 +1,7 @@
 use std::{
     env,
     ffi::OsStr,
+    fmt,
     sync::Once,
 };
 
@@ -32,4 +33,16 @@ pub fn init() {
         env_or_default(env_keys::RUST_LOG, || format!("{}={}", env!("CARGO_CRATE_NAME"), DEFAULT_LOG_LEVEL));
         env_logger::init();
     });
+}
+
+#[inline(always)]
+pub fn run_main<F, T, E>(f: F)
+where
+    F: FnOnce() -> Result<T, E>,
+    E: fmt::Display,
+{
+    init();
+    if let Err(e) = f() {
+        error!("{}", &e);
+    }
 }
