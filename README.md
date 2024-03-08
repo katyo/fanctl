@@ -21,7 +21,7 @@ The built binary will be in `target/release/fanctl`.
 ## Running
 
 ```
-fancl -c <CONFIG_FILE>
+fanctl -c <CONFIG_FILE>
 ```
 
 # Configuration
