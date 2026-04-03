@@ -28,7 +28,7 @@ fanctl -c <CONFIG_FILE>
 
 # Configuration
 
-An example configuration file can be found at [`fanctl.yml`](https://gitlab.com/mcoffin/fanctl/tree/master/fanctl.yml).
+An example configuration file can be found at [`fanctl.yml`](fanctl.yml).
 
 More detailed information can be found in [the documentation](https://docs.rs/fanctl). The `config` module is a good place to start.
 
@@ -43,4 +43,4 @@ cargo doc --no-deps
 
 `fanctl` is released under the GNU General Public License v3.0.
 
-See the [`COPYING`](https://gitlab.com/mcoffin/fanctl/tree/master/COPYING) file for more information.
+See the [`COPYING`](COPYING) file for more information.
