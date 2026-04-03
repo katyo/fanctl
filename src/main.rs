@@ -1,60 +1,44 @@
-extern crate clap;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-extern crate serde;
-extern crate serde_yaml;
-extern crate splines;
-extern crate signal_hook;
-extern crate regex;
-extern crate thiserror;
-
-mod logging;
-pub mod hwmon;
 pub mod config;
-pub mod rules;
+pub mod hwmon;
+mod logging;
 pub mod metrics;
+#[cfg(feature = "nvidia")]
+pub mod nvidia;
 pub(crate) mod path_ext;
+pub mod rules;
+mod traits;
 
-use clap::{
-    Parser,
-    crate_version,
-    crate_authors,
-};
-use std:: {
-    collections::HashMap,
-    convert::{
-        TryFrom,
-        TryInto,
-    },
-    error::Error,
-    io,
-    path::{
-        Path,
-        PathBuf,
-    },
-    rc::Rc,
-    sync::{
-        Arc,
-        Mutex,
-        atomic::{
-            AtomicBool,
-            Ordering,
-        },
-    },
-    error,
-};
-use config::{
-    Config,
-    ConfigError,
-};
+use clap::{Parser, crate_authors, crate_version};
+use config::{Config, ConfigError};
+use log::*;
+use nvml::Nvml;
 use rules::Rule;
 use serde_yaml::Error as YamlError;
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    error,
+    error::Error,
+    io,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+use traits::*;
 
 #[derive(Debug, Parser)]
 #[clap(version = crate_version!(), author = crate_authors!())]
 pub struct Options {
-    #[clap(short, long, value_name = "CONFIG_FILE", help = "Config file path", parse(from_os_str))]
+    #[clap(
+        short,
+        long,
+        value_name = "CONFIG_FILE",
+        help = "Config file path",
+        parse(from_os_str)
+    )]
     config: PathBuf,
 }
 
@@ -72,19 +56,19 @@ impl Options {
 #[derive(Debug, thiserror::Error)]
 enum UpdateError {
     #[error("Error updating rule: {0}")]
-    Rule(io::Error),
+    Rule(SensorError),
     #[error("Error updating fan: {0}")]
-    FanIo(io::Error),
+    FanIo(FanError),
 }
 
 struct BoundRule {
-    outputs: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>>,
+    outputs: Vec<Rc<Mutex<Box<dyn Fan>>>>,
     rule: Box<dyn Rule>,
 }
 
 impl BoundRule {
     #[inline]
-    fn new(outputs: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>>, rule: Box<dyn Rule>) -> BoundRule {
+    fn new(outputs: Vec<Rc<Mutex<Box<dyn Fan>>>>, rule: Box<dyn Rule>) -> BoundRule {
         BoundRule {
             outputs: outputs,
             rule: rule,
@@ -101,10 +85,8 @@ impl BoundRule {
     }
 
     fn update(&mut self) -> Result<f64, UpdateError> {
-        let value = self.rule.get_value()
-            .map_err(UpdateError::Rule)?;
-        self.enable_and_set_all(value)
-            .map_err(UpdateError::FanIo)?;
+        let value = self.rule.get_value().map_err(UpdateError::Rule)?;
+        self.enable_and_set_all(value).map_err(UpdateError::FanIo)?;
         Ok(value)
     }
 }
@@ -117,30 +99,37 @@ enum ProgramError {
     FindFan(String, config::FindHwmonError),
     #[error("Error in rule configuration: {0}")]
     RuleConfig(#[from] rules::RuleConfigError),
+    #[cfg(feature = "nvidia")]
+    #[error("Error in NVML: {0}")]
+    Nvml(#[from] nvml::error::NvmlError),
 }
 
 struct FanControlProgram {
     rules: Vec<BoundRule>,
     config: Config,
+    #[cfg(feature = "nvidia")]
+    nvml: nvml::Nvml,
 }
 
 impl TryFrom<Config> for FanControlProgram {
     type Error = ProgramError;
 
     fn try_from(config: Config) -> Result<FanControlProgram, Self::Error> {
-        let mut inputs: HashMap<String, Rc<dyn hwmon::Sensor>> = HashMap::new();
+        let nvml = Nvml::init()?;
+
+        let mut inputs: HashMap<String, Rc<dyn Sensor>> = HashMap::new();
         for (name, input_config) in config.inputs.iter() {
             let name = name.clone();
-            let (name, sensor): (String, Box<dyn hwmon::Sensor>) = match input_config.try_into() {
+            let (name, sensor): (String, Box<dyn Sensor>) = match input_config.try_into() {
                 Ok(sensor) => Ok((name, sensor)),
                 Err(e) => Err(ProgramError::FindSensor(name, e)),
             }?;
             inputs.insert(name, Rc::from(sensor));
         }
-        let mut outputs: HashMap<String, Rc<Mutex<Box<dyn hwmon::Fan>>>> = HashMap::new();
+        let mut outputs: HashMap<String, Rc<Mutex<Box<dyn Fan>>>> = HashMap::new();
         for (name, output_config) in config.outputs.iter() {
             let name = name.clone();
-            let (name, fan): (String, Box<dyn hwmon::Fan>) = match output_config.try_into() {
+            let (name, fan): (String, Box<dyn Fan>) = match output_config.try_into() {
                 Ok(fan) => Ok((name, fan)),
                 Err(e) => Err(ProgramError::FindFan(name, e)),
             }?;
@@ -148,13 +137,19 @@ impl TryFrom<Config> for FanControlProgram {
         }
         let mut rules: Vec<BoundRule> = Vec::with_capacity(config.rules.len());
         for rule_binding in config.rules.iter() {
-            let rule = rules::rule_from_config(&rule_binding.rule, |name| inputs.get(name).map(Clone::clone))?;
-            let mut os: Vec<Rc<Mutex<Box<dyn hwmon::Fan>>>> = Vec::with_capacity(rule_binding.outputs.len());
+            let rule = rules::rule_from_config(&rule_binding.rule, |name| {
+                inputs.get(name).map(Clone::clone)
+            })?;
+            let mut os: Vec<Rc<Mutex<Box<dyn Fan>>>> =
+                Vec::with_capacity(rule_binding.outputs.len());
             for output_name in rule_binding.outputs.iter() {
-                let output = outputs.get(output_name)
+                let output = outputs
+                    .get(output_name)
                     .map(Clone::clone)
                     .map(Ok)
-                    .unwrap_or_else(|| Err(rules::RuleConfigError::UnknownOutput(output_name.clone())))?;
+                    .unwrap_or_else(|| {
+                        Err(rules::RuleConfigError::UnknownOutput(output_name.clone()))
+                    })?;
                 os.push(output);
             }
             rules.push(BoundRule::new(os, rule));
@@ -162,6 +157,8 @@ impl TryFrom<Config> for FanControlProgram {
         Ok(FanControlProgram {
             rules: rules,
             config: config,
+            #[cfg(feature = "nvidia")]
+            nvml,
         })
     }
 }
@@ -174,18 +171,23 @@ impl FanControlProgram {
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        self.rules.iter_mut()
-            .fold(Ok(()), |r, rule| r.and_then(move |_| rule.update().map(|_| ())))
+        self.rules.iter_mut().fold(Ok(()), |r, rule| {
+            r.and_then(move |_| rule.update().map(|_| ()))
+        })
     }
 
     fn disable_outputs(&mut self) -> io::Result<()> {
-        self.rules.iter_mut()
+        self.rules
+            .iter_mut()
             .map(|r| {
-                r.outputs.iter_mut()
+                r.outputs
+                    .iter_mut()
                     .map(|o| {
                         use io::ErrorKind;
                         o.try_lock()
-                            .map_err(|_| io::Error::new(ErrorKind::Other, "Failed to lock mutex for output!"))
+                            .map_err(|_| {
+                                io::Error::new(ErrorKind::Other, "Failed to lock mutex for output!")
+                            })
                             .and_then(|mut o| o.close())
                     })
                     .fold(Ok(()), Result::and)
@@ -199,10 +201,7 @@ fn on_fan_update_error<E: error::Error>(e: E) {
 }
 
 fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
-    let signals = [
-        signal_hook::SIGINT,
-        signal_hook::SIGTERM,
-    ];
+    let signals = [signal_hook::SIGINT, signal_hook::SIGTERM];
     for &s in &signals {
         signal_hook::flag::register(s, flag.clone())?;
     }

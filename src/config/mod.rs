@@ -1,23 +1,17 @@
-use serde::{Serialize, Deserialize};
-
-use super::hwmon;
-
-mod rules;
 pub mod error;
-pub use error::{
-    ConfigError,
-    read_config,
-    read_config_yaml,
-};
+#[cfg(feature = "nvidia")]
+mod nvidia;
+mod rules;
+
+use crate::{Fan, Sensor, hwmon};
+pub use error::{ConfigError, read_config, read_config_yaml};
+#[cfg(feature = "nvidia")]
+pub use nvidia::*;
 pub use rules::*;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::{
-        HashMap,
-        LinkedList,
-    },
-    convert::{
-        TryInto,
-    },
+    collections::{HashMap, LinkedList},
+    convert::TryInto,
     io,
     path::PathBuf,
 };
@@ -42,6 +36,9 @@ pub struct Config {
 pub enum Input {
     /// Standard hwmon input sensor
     HwmonSensor(HwmonSensor),
+    #[cfg(feature = "nvidia")]
+    /// Nvidia hardware sensors
+    NvidiaSensor(NvidiaSensor),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -50,6 +47,9 @@ pub enum FindHwmonError {
     Io(#[from] io::Error),
     #[error("No hwmon component found for search: {0}")]
     NotFound(String),
+    #[cfg(feature = "nvidia")]
+    #[error("Error searching for nvidia device: {0}")]
+    Nvml(#[from] nvml::error::NvmlError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,24 +65,33 @@ impl HwmonSensor {
             HwmonSensor::Path { path } => {
                 use crate::path_ext::PathExt;
                 path.expand_wildcards().map_err(FindHwmonError::from)
-            },
+            }
             HwmonSensor::Search { hwmon, label } => hwmon::search_input(hwmon, label)
                 .map_err(FindHwmonError::from)
-                .and_then(|v| v.map(Ok).unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label))))),
+                .and_then(|v| {
+                    v.map(Ok).unwrap_or_else(|| {
+                        Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label)))
+                    })
+                }),
         }
     }
 }
 
-impl<'a> TryInto<Box<dyn hwmon::Sensor>> for &'a Input {
+impl<'a> TryInto<Box<dyn Sensor>> for &'a Input {
     type Error = FindHwmonError;
 
-    fn try_into(self) -> Result<Box<dyn hwmon::Sensor>, Self::Error> {
+    fn try_into(self) -> Result<Box<dyn Sensor>, Self::Error> {
         match self {
             Input::HwmonSensor(sensor) => {
-                let ret = sensor.path()
-                    .map(hwmon::HwmonSensor::new)?;
+                let ret = sensor.path().map(hwmon::HwmonSensor::new)?;
                 Ok(Box::new(ret))
-            },
+            }
+            Input::NvidiaSensor(sensor) => {
+                let ret = sensor
+                    .device(crate::nvidia::nvml()?)
+                    .map(crate::nvidia::NvidiaSensor::new)?;
+                Ok(Box::new(ret))
+            }
         }
     }
 }
@@ -117,28 +126,38 @@ impl FanHwmon {
             &FanHwmon::Path { ref path } => {
                 use crate::path_ext::PathExt;
                 path.expand_wildcards().map_err(FindHwmonError::from)
-            },
+            }
             &FanHwmon::Search { ref hwmon } => hwmon::search_hwmon(hwmon)
                 .map_err(FindHwmonError::from)
-                .and_then(|v| v.map(Ok).unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}", hwmon)))))
+                .and_then(|v| {
+                    v.map(Ok)
+                        .unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}", hwmon))))
+                }),
         }
     }
 }
 
-impl<'a> TryInto<Box<dyn hwmon::Fan>> for &'a Output {
+impl<'a> TryInto<Box<dyn Fan>> for &'a Output {
     type Error = FindHwmonError;
 
-    fn try_into(self) -> Result<Box<dyn hwmon::Fan>, Self::Error> {
+    fn try_into(self) -> Result<Box<dyn Fan>, Self::Error> {
         match self {
-            &Output::PwmFan { ref hwmon, ref name } => {
+            &Output::PwmFan {
+                ref hwmon,
+                ref name,
+            } => {
                 let fan = hwmon::PwmFan::new(hwmon.path()?, name.clone())?;
                 Ok(Box::new(fan))
-            },
-            &Output::AmdgpuFan { ref hwmon, ref prefix } => {
-                let fan = hwmon.path()
+            }
+            &Output::AmdgpuFan {
+                ref hwmon,
+                ref prefix,
+            } => {
+                let fan = hwmon
+                    .path()
                     .map(|path| hwmon::amdgpu::AmdgpuFan::new(path, prefix))?;
                 Ok(Box::new(fan))
-            },
+            }
         }
     }
 }

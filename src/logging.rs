@@ -1,9 +1,5 @@
-use std::{
-    env,
-    ffi::OsStr,
-    fmt,
-    sync::Once,
-};
+use log::*;
+use std::{env, ffi::OsStr, fmt, sync::Once};
 
 mod env_keys {
     pub const RUST_LOG: &'static str = "RUST_LOG";
@@ -17,7 +13,9 @@ where
 {
     let key = key.as_ref();
     if env::var_os(key).is_none() {
-        env::set_var(key, value());
+        unsafe {
+            env::set_var(key, value());
+        }
     }
 }
 
@@ -30,7 +28,9 @@ static INIT_LOGGING: Once = Once::new();
 
 pub fn init() {
     INIT_LOGGING.call_once(|| {
-        env_or_default(env_keys::RUST_LOG, || format!("{}={}", env!("CARGO_CRATE_NAME"), DEFAULT_LOG_LEVEL));
+        env_or_default(env_keys::RUST_LOG, || {
+            format!("{}={}", env!("CARGO_CRATE_NAME"), DEFAULT_LOG_LEVEL)
+        });
         env_logger::init();
     });
 }

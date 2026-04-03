@@ -2,8 +2,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::Fan;
 use super::util::{ReadFileError, read_file_value};
+use crate::Fan;
 
 #[derive(Debug, Clone)]
 pub struct AmdgpuFan {
@@ -33,7 +33,7 @@ impl AmdgpuFan {
             enable_path: make_path("enable"),
             target_path: make_path("target"),
             min_path: make_path("min"),
-            max_path: make_path("max")
+            max_path: make_path("max"),
         }
     }
 
@@ -62,9 +62,7 @@ impl AmdgpuFan {
 
     fn set_target(&mut self, target: u64) -> io::Result<()> {
         use io::Write;
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .open(&self.target_path)?;
+        let mut file = fs::OpenOptions::new().write(true).open(&self.target_path)?;
         write!(file, "{}", target)
     }
 }
@@ -73,14 +71,8 @@ impl Fan for AmdgpuFan {
     fn set_enabled(&mut self, enabled: bool) -> io::Result<()> {
         use io::Write;
 
-        let value = if enabled {
-            "1"
-        } else {
-            "0"
-        };
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .open(&self.enable_path)?;
+        let value = if enabled { "1" } else { "0" };
+        let mut file = fs::OpenOptions::new().write(true).open(&self.enable_path)?;
         write!(file, "{}", value)
     }
 

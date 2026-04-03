@@ -1,8 +1,10 @@
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
-use std::io;
-use super::{util, Fan};
-use std::fs;
+use super::util;
+use crate::Fan;
+use std::{
+    borrow::Cow,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub enum PwmEnableState {
@@ -79,17 +81,14 @@ impl<P: AsRef<Path>> PwmFan<P> {
     pub fn enabled(&self) -> io::Result<PwmEnableState> {
         use util::ReadFileResult;
         let enabled_path = self.get_path(Some(ENABLE_PATH));
-        let value: u8 = util::read_file_value(&enabled_path, 2)
-            .into_io_result()?;
+        let value: u8 = util::read_file_value(&enabled_path, 2).into_io_result()?;
         Ok(PwmEnableState::from(value))
     }
 
     pub fn set_enabled_pwm(&mut self, state: PwmEnableState) -> io::Result<()> {
         use io::Write;
         let enabled_path = self.get_path(Some(ENABLE_PATH));
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .open(&enabled_path)?;
+        let mut file = fs::OpenOptions::new().write(true).open(&enabled_path)?;
         let value: u8 = state.into();
         write!(&mut file, "{}", value)
     }
@@ -97,9 +96,7 @@ impl<P: AsRef<Path>> PwmFan<P> {
     pub fn set_value_pwm(&mut self, value: u8) -> io::Result<()> {
         use io::Write;
         let value_path = self.get_path(None);
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .open(&value_path)?;
+        let mut file = fs::OpenOptions::new().write(true).open(&value_path)?;
         write!(&mut file, "{}", value)
     }
 }

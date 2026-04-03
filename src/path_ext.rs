@@ -1,11 +1,8 @@
+use log::*;
 use regex::Regex;
 use std::{
-    fs,
-    io,
-    path::{
-        Path,
-        PathBuf,
-    },
+    fs, io,
+    path::{Path, PathBuf},
 };
 
 const WILDCARD_CHAR: char = '*';
@@ -28,18 +25,20 @@ impl PathExt for Path {
                         .expect(&format!("Failed to compile regular expression while evaluating wildcard path component: \"{:?}\"", component))
                 };
                 let entries = fs::read_dir(&real_path)?;
-                let found_entry = entries.filter_map(|entry| {
-                    if let Ok(entry) = entry {
-                        let entry_s = entry.file_name().to_str().map(String::from).unwrap();
-                        if r.is_match(&entry_s) {
-                            Some(entry_s)
+                let found_entry = entries
+                    .filter_map(|entry| {
+                        if let Ok(entry) = entry {
+                            let entry_s = entry.file_name().to_str().map(String::from).unwrap();
+                            if r.is_match(&entry_s) {
+                                Some(entry_s)
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
-                    } else {
-                        None
-                    }
-                }).next();
+                    })
+                    .next();
                 if let Some(found_entry) = found_entry {
                     real_path.push(found_entry);
                 } else {
@@ -48,7 +47,10 @@ impl PathExt for Path {
                     real_path.push(component);
                 }
             } else {
-                trace!("There were no wildcards in path component: \"{}\"", component_s);
+                trace!(
+                    "There were no wildcards in path component: \"{}\"",
+                    component_s
+                );
                 // There were no wildcards, so just append the component directly
                 real_path.push(component);
             }

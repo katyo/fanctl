@@ -2,14 +2,14 @@
 name = "fanctl"
 version = "0.6.4"
 authors = ["Matt Coffin <mcoffin13@gmail.com>"]
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0"
 description = "Fancontrol replacement in Rust with YAML configuration"
 documentation = "https://docs.rs/fanctl"
 homepage = "https://gitlab.com/mcoffin/fanctl"
 repository = "https://gitlab.com/mcoffin/fanctl"
-exclude = [ "fanctl.yml", ".gitlab-ci.yml" ]
-keywords = [ "fancontrol", "fan", "sysfs", "hwmon" ]
+exclude = ["fanctl.yml", ".gitlab-ci.yml"]
+keywords = ["fancontrol", "fan", "sysfs", "hwmon"]
 
 [dependencies]
 serde_yaml = "0.8"
@@ -19,12 +19,25 @@ log = "0.4"
 signal-hook = "0.1"
 regex = "^1.3.7"
 thiserror = "1.0"
-clap = { version = "3.2", features = ["derive", "cargo"] }
+
+[dependencies.clap]
+version = "3.2"
+features = ["derive", "cargo"]
 
 [dependencies.serde]
 version = "1.0"
 features = ["derive"]
 
+[dependencies.serde_with]
+version = "3"
+optional = true
+
+[dependencies.nvml]
+package = "nvml-wrapper"
+version = "0.12"
+optional = true
+
 [features]
-default = ["color"]
+default = ["color", "nvidia"]
 color = ["clap/color"]
+nvidia = ["serde_with", "nvml"]
