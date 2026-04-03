@@ -1,9 +1,9 @@
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-
 use super::util::{ReadFileError, read_file_value};
 use crate::Fan;
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone)]
 pub struct AmdgpuFan {
