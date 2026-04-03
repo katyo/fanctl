@@ -43,14 +43,14 @@ impl Sensor for NvidiaSensor {
         Ok(self
             .device
             .temperature(TemperatureSensor::Gpu)
-            .map(|v| v as f64 * 1e-3)?)
+            .map(|v| v as f64)?)
     }
 
     fn get_critical(&self) -> SensorResult<f64> {
         Ok(self
             .device
             .temperature_threshold(TemperatureThreshold::Shutdown)
-            .map(|v| v as f64 * 1e-3)?)
+            .map(|v| v as f64)?)
     }
 }
 
