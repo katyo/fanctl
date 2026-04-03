@@ -2,6 +2,8 @@
 
 `fanctl` is a replacement for `fancontrol` from `lm_sensors` meant to have a more fine-grained control interface in its config file.
 
+This repo is fork of [mcoffin's fanctl](https://gitlab.com/mcoffin/fanctl) with updates and improvements.
+
 ## Motivation
 
 `fancontrol`'s configuration is pretty cryptic, and controlling it is quite hard. [Rust](https://rust-lang.org) was chosen as the implementation language of choice due to the problems that can arise if the program controlling your fans crashes un-cleanly (potentially causing hardware to overheat).

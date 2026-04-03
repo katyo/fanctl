@@ -31,13 +31,7 @@ use traits::*;
 #[derive(Debug, Parser)]
 #[clap(version = crate_version!(), author = crate_authors!())]
 pub struct Options {
-    #[clap(
-        short,
-        long,
-        value_name = "CONFIG_FILE",
-        help = "Config file path",
-        parse(from_os_str)
-    )]
+    #[clap(short, long, value_name = "CONFIG_FILE", help = "Config file path")]
     config: PathBuf,
 }
 
@@ -185,7 +179,9 @@ fn on_fan_update_error<E: error::Error>(e: E) {
 }
 
 fn setup_exit_handlers(flag: &Arc<AtomicBool>) -> Result<(), io::Error> {
-    let signals = [signal_hook::SIGINT, signal_hook::SIGTERM];
+    use signal_hook::consts;
+
+    let signals = [consts::SIGINT, consts::SIGTERM];
     for &s in &signals {
         signal_hook::flag::register(s, flag.clone())?;
     }
