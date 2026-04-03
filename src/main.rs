@@ -11,7 +11,6 @@ mod traits;
 use clap::{Parser, crate_authors, crate_version};
 use config::{Config, ConfigError};
 use log::*;
-use nvml::Nvml;
 use rules::Rule;
 use serde_yaml::Error as YamlError;
 use std::{
@@ -69,10 +68,7 @@ struct BoundRule {
 impl BoundRule {
     #[inline]
     fn new(outputs: Vec<Rc<Mutex<Box<dyn Fan>>>>, rule: Box<dyn Rule>) -> BoundRule {
-        BoundRule {
-            outputs: outputs,
-            rule: rule,
-        }
+        BoundRule { outputs, rule }
     }
 
     fn enable_and_set_all(&mut self, value: f64) -> io::Result<f64> {
@@ -107,16 +103,12 @@ enum ProgramError {
 struct FanControlProgram {
     rules: Vec<BoundRule>,
     config: Config,
-    #[cfg(feature = "nvidia")]
-    nvml: nvml::Nvml,
 }
 
 impl TryFrom<Config> for FanControlProgram {
     type Error = ProgramError;
 
     fn try_from(config: Config) -> Result<FanControlProgram, Self::Error> {
-        let nvml = Nvml::init()?;
-
         let mut inputs: HashMap<String, Rc<dyn Sensor>> = HashMap::new();
         for (name, input_config) in config.inputs.iter() {
             let name = name.clone();
@@ -154,12 +146,7 @@ impl TryFrom<Config> for FanControlProgram {
             }
             rules.push(BoundRule::new(os, rule));
         }
-        Ok(FanControlProgram {
-            rules: rules,
-            config: config,
-            #[cfg(feature = "nvidia")]
-            nvml,
-        })
+        Ok(FanControlProgram { rules, config })
     }
 }
 
@@ -171,9 +158,9 @@ impl FanControlProgram {
     }
 
     fn run_once(&mut self) -> Result<(), UpdateError> {
-        self.rules.iter_mut().fold(Ok(()), |r, rule| {
-            r.and_then(move |_| rule.update().map(|_| ()))
-        })
+        self.rules
+            .iter_mut()
+            .try_fold((), |_, rule| rule.update().map(|_| ()))
     }
 
     fn disable_outputs(&mut self) -> io::Result<()> {
@@ -183,11 +170,8 @@ impl FanControlProgram {
                 r.outputs
                     .iter_mut()
                     .map(|o| {
-                        use io::ErrorKind;
                         o.try_lock()
-                            .map_err(|_| {
-                                io::Error::new(ErrorKind::Other, "Failed to lock mutex for output!")
-                            })
+                            .map_err(|_| io::Error::other("Failed to lock mutex for output!"))
                             .and_then(|mut o| o.close())
                     })
                     .fold(Ok(()), Result::and)

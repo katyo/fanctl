@@ -38,7 +38,7 @@ fn with_spec(path: impl AsRef<Path>, spec: impl AsRef<str>) -> Option<PathBuf> {
         path.file_name()
             .map(|s| s.to_string_lossy())
             .and_then(|file_name| file_name.split("_").next().map(|s| s.to_string()))
-            .map(move |base_name| (dir_name.join(format!("{}_{}", base_name, spec.as_ref()))))
+            .map(move |base_name| dir_name.join(format!("{}_{}", base_name, spec.as_ref())) )
     })
 }
 
@@ -59,7 +59,7 @@ impl Sensor for HwmonSensor {
     fn get_value(&self) -> SensorResult<f64> {
         Ok(self.read_val_raw().map_err(|e| match e {
             ReadFileError::Io(e) => e,
-            ReadFileError::Parse(e) => io::Error::new(io::ErrorKind::Other, e),
+            ReadFileError::Parse(e) => io::Error::other(e),
         })? as f64
             * 1e-3)
     }
@@ -69,10 +69,10 @@ impl Sensor for HwmonSensor {
             .read_crit_raw()
             .map_err(|e| match e {
                 ReadFileError::Io(e) => e,
-                ReadFileError::Parse(e) => io::Error::new(io::ErrorKind::Other, e),
+                ReadFileError::Parse(e) => io::Error::other(e),
             })?
             .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::Other, "failed to get critical file path")
+                io::Error::other("failed to get critical file path")
             })? as f64
             * 1e-3)
     }
@@ -98,15 +98,13 @@ pub fn search_input(name: &str, label: &str) -> io::Result<Option<PathBuf>> {
     if let Some(hwmon) = search_hwmon(name)? {
         for file in hwmon.read_dir()?.filter_map(|r| r.ok()) {
             let path = file.path();
-            if let Some(path_str) = path.as_os_str().to_str() {
-                if path_str.ends_with("label") {
-                    if read_to_string(&path)?.trim() == label {
+            if let Some(path_str) = path.as_os_str().to_str()
+                && path_str.ends_with("label")
+                    && read_to_string(&path)?.trim() == label {
                         let input = format!("{}input", path_str.trim_end_matches("label"));
                         debug!("found hwmon input {}/{} at {}", name, label, input);
                         return Ok(Some(input.into()));
                     }
-                }
-            }
         }
     }
     Ok(None)

@@ -27,7 +27,7 @@ where
 {
     let ret: Box<dyn Rule> = match config {
         &RuleConfig::Static(v) => Box::new(Static(v)),
-        &RuleConfig::Maximum(ref rules) => {
+        RuleConfig::Maximum(rules) => {
             let mut rs = LinkedList::new();
             for rule in rules.iter() {
                 let r = rule_from_config(rule, get_input)?;
@@ -61,7 +61,7 @@ where
                 .unwrap_or_else(|| Err(RuleConfigError::UnknownInput(input.clone())))?;
             Box::new(Curve::new(
                 input,
-                keys.iter().map(|&p| p),
+                keys.iter().copied(),
                 out_of_bounds_value,
             ))
         }
@@ -100,8 +100,7 @@ impl Rule for Maximum {
                 max = Some(value);
             }
         }
-        max.map(Ok).unwrap_or(Err(io::Error::new(
-            io::ErrorKind::Other,
+        max.map(Ok).unwrap_or(Err(io::Error::other(
             "No inputs available for \"Maximum\" rule",
         ))?)
     }
@@ -117,8 +116,8 @@ impl Smooth {
     #[inline]
     pub fn new(rule: Box<dyn Rule>, samples: usize) -> Self {
         Smooth {
-            rule: rule,
-            samples: samples,
+            rule,
+            samples,
             buffer: RefCell::new(Vec::with_capacity(samples)),
         }
     }
@@ -160,7 +159,7 @@ impl Rule for Smooth {
 
         match self.get_smoothed() {
             Some(value) => Ok(value),
-            None => Err(io::Error::new(io::ErrorKind::Other, "No input data"))?,
+            None => Err(io::Error::other("No input data"))?,
         }
     }
 }
@@ -175,9 +174,9 @@ impl<S: AsRef<dyn Sensor>> GateStatic<S> {
     #[inline]
     pub fn new(input: S, threshold: f64, value: f64) -> Self {
         GateStatic {
-            input: input,
-            threshold: threshold,
-            value: value,
+            input,
+            threshold,
+            value,
         }
     }
 }
@@ -203,8 +202,8 @@ impl<S: AsRef<dyn Sensor>> GateCritical<S> {
     #[inline]
     pub fn new(input: S, value: f64) -> Self {
         GateCritical {
-            input: input,
-            value: value,
+            input,
+            value,
         }
     }
 }
@@ -246,8 +245,8 @@ impl<S: AsRef<dyn Sensor>> Curve<S> {
         });
         let spline = Spline::from_iter(keys);
         Curve {
-            input: input,
-            spline: spline,
+            input,
+            spline,
             out_of_bounds_value: out_of_bounds_value.unwrap_or(1.0),
         }
     }

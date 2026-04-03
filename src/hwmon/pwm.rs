@@ -23,10 +23,10 @@ impl From<u8> for PwmEnableState {
     }
 }
 
-impl Into<u8> for PwmEnableState {
-    fn into(self) -> u8 {
+impl From<PwmEnableState> for u8 {
+    fn from(val: PwmEnableState) -> Self {
         use PwmEnableState::*;
-        match self {
+        match val {
             Disabled => 0x0,
             Manual => 0x1,
             Automatic(v) => v,
@@ -43,7 +43,7 @@ fn pwm_enable_state(enabled: bool) -> PwmEnableState {
     }
 }
 
-const ENABLE_PATH: &'static str = "enable";
+const ENABLE_PATH: &str = "enable";
 
 pub struct PwmFan<P: AsRef<Path>> {
     name: String,
@@ -59,7 +59,7 @@ impl<P: AsRef<Path>> PwmFan<P> {
 
     pub fn new(base_path: P, name: String) -> io::Result<Self> {
         let mut ret = PwmFan {
-            name: name,
+            name,
             initial_state: PwmEnableState::Disabled,
             real_path: base_path,
         };
@@ -69,7 +69,7 @@ impl<P: AsRef<Path>> PwmFan<P> {
 
     fn get_path(&self, component: Option<&str>) -> PathBuf {
         let mut path = self.real_path().to_owned();
-        let component = component.filter(|s| s.len() > 0);
+        let component = component.filter(|s| !s.is_empty());
         let filename = component
             .map(|c| Cow::Owned(format!("{}_{}", &self.name, c)))
             .unwrap_or_else(|| Cow::Borrowed(&self.name));

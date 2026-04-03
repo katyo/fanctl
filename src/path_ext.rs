@@ -17,12 +17,12 @@ impl PathExt for Path {
         for component in self.iter() {
             let component_s = component.to_str().unwrap();
             let mut wildcards = component_s.matches(WILDCARD_CHAR).peekable();
-            if let Some(_) = wildcards.peek() {
+            if wildcards.peek().is_some() {
                 trace!("Found wildcard component: {:?}", component_s);
                 let r = {
                     let pattern = format!("^{}$", component_s.replace(WILDCARD_CHAR, ".*"));
                     Regex::new(&pattern)
-                        .expect(&format!("Failed to compile regular expression while evaluating wildcard path component: \"{:?}\"", component))
+                        .unwrap_or_else(|_| panic!("Failed to compile regular expression while evaluating wildcard path component: \"{:?}\"", component))
                 };
                 let entries = fs::read_dir(&real_path)?;
                 let found_entry = entries

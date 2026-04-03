@@ -3,15 +3,14 @@ pub struct OutputMetricsTracker {
     count: usize,
 }
 
-impl OutputMetricsTracker {
+impl Default for OutputMetricsTracker {
     #[inline(always)]
-    pub fn new() -> Self {
-        OutputMetricsTracker {
-            sum: 0.0,
-            count: 0,
-        }
+    fn default() -> Self {
+        OutputMetricsTracker { sum: 0.0, count: 0 }
     }
+}
 
+impl OutputMetricsTracker {
     pub fn reset(&mut self) {
         self.sum = 0.0;
         self.count = 0;

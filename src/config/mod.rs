@@ -77,7 +77,7 @@ impl HwmonSensor {
     }
 }
 
-impl<'a> TryInto<Box<dyn Sensor>> for &'a Input {
+impl TryInto<Box<dyn Sensor>> for &Input {
     type Error = FindHwmonError;
 
     fn try_into(self) -> Result<Box<dyn Sensor>, Self::Error> {
@@ -121,37 +121,37 @@ pub enum FanHwmon {
 }
 
 impl FanHwmon {
-    pub fn path<'a>(&'a self) -> Result<PathBuf, FindHwmonError> {
+    pub fn path(&self) -> Result<PathBuf, FindHwmonError> {
         match self {
-            &FanHwmon::Path { ref path } => {
+            FanHwmon::Path { path } => {
                 use crate::path_ext::PathExt;
                 path.expand_wildcards().map_err(FindHwmonError::from)
             }
-            &FanHwmon::Search { ref hwmon } => hwmon::search_hwmon(hwmon)
+            FanHwmon::Search { hwmon } => hwmon::search_hwmon(hwmon)
                 .map_err(FindHwmonError::from)
                 .and_then(|v| {
                     v.map(Ok)
-                        .unwrap_or_else(|| Err(FindHwmonError::NotFound(format!("{}", hwmon))))
+                        .unwrap_or_else(|| Err(FindHwmonError::NotFound(hwmon.to_string())))
                 }),
         }
     }
 }
 
-impl<'a> TryInto<Box<dyn Fan>> for &'a Output {
+impl TryInto<Box<dyn Fan>> for &Output {
     type Error = FindHwmonError;
 
     fn try_into(self) -> Result<Box<dyn Fan>, Self::Error> {
         match self {
-            &Output::PwmFan {
-                ref hwmon,
-                ref name,
+            Output::PwmFan {
+                hwmon,
+                name,
             } => {
                 let fan = hwmon::PwmFan::new(hwmon.path()?, name.clone())?;
                 Ok(Box::new(fan))
             }
-            &Output::AmdgpuFan {
-                ref hwmon,
-                ref prefix,
+            Output::AmdgpuFan {
+                hwmon,
+                prefix,
             } => {
                 let fan = hwmon
                     .path()

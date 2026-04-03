@@ -16,10 +16,6 @@ pub trait Sensor {
     fn get_critical(&self) -> SensorResult<f64>;
 }
 
-fn from_milli(raw_value: u64) -> f64 {
-    (raw_value as f64) / 1000.0
-}
-
 pub type FanError = std::io::Error;
 pub type FanResult<T> = std::io::Result<T>;
 

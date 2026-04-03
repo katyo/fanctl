@@ -2,7 +2,7 @@ use log::*;
 use std::{env, ffi::OsStr, fmt, sync::Once};
 
 mod env_keys {
-    pub const RUST_LOG: &'static str = "RUST_LOG";
+    pub const RUST_LOG: &str = "RUST_LOG";
 }
 
 fn env_or_default<K, V, F>(key: K, value: F)
@@ -20,7 +20,7 @@ where
 }
 
 #[cfg(debug_assertions)]
-pub const DEFAULT_LOG_LEVEL: &'static str = "trace";
+pub const DEFAULT_LOG_LEVEL: &str = "trace";
 #[cfg(not(debug_assertions))]
 pub const DEFAULT_LOG_LEVEL: &'static str = "info";
 
