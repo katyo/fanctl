@@ -59,11 +59,7 @@ where
             let input = get_input(input)
                 .map(Ok)
                 .unwrap_or_else(|| Err(RuleConfigError::UnknownInput(input.clone())))?;
-            Box::new(Curve::new(
-                input,
-                keys.iter().copied(),
-                out_of_bounds_value,
-            ))
+            Box::new(Curve::new(input, keys.iter().copied(), out_of_bounds_value))
         }
         &RuleConfig::Smooth { ref rule, samples } => {
             let r = rule_from_config(rule, get_input)?;
@@ -100,9 +96,7 @@ impl Rule for Maximum {
                 max = Some(value);
             }
         }
-        max.map(Ok).unwrap_or(Err(io::Error::other(
-            "No inputs available for \"Maximum\" rule",
-        ))?)
+        Ok(max.ok_or(io::Error::other("No inputs available for \"Maximum\" rule"))?)
     }
 }
 
@@ -201,10 +195,7 @@ pub struct GateCritical<S: AsRef<dyn Sensor>> {
 impl<S: AsRef<dyn Sensor>> GateCritical<S> {
     #[inline]
     pub fn new(input: S, value: f64) -> Self {
-        GateCritical {
-            input,
-            value,
-        }
+        GateCritical { input, value }
     }
 }
 
