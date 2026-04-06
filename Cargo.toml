@@ -1,6 +1,6 @@
 [package]
 name = "fanctl"
-version = "0.6.4"
+version = "0.7.0"
 authors = ["Matt Coffin <mcoffin13@gmail.com>", "K. <kayo@illumium.org>"]
 edition = "2024"
 license = "GPL-3.0"
