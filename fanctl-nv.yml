@@ -1,0 +1,34 @@
+interval: 500
+log_interval: 250
+inputs:
+  t_amd_cpu: !HwmonSensor { hwmon: k10temp, label: Tctl }
+  t_amd_gpu: !HwmonSensor { hwmon: amdgpu, label: edge }
+  t_nv_gpu1: !NvidiaSensor { uuid: GPU-dc3f937d-671d-4068-b264-f899689739f1 }
+  t_nv_gpu2: !NvidiaSensor { uuid: GPU-d523e4dc-3a7c-cf54-b3a6-8aa56e26a6fd }
+outputs:
+  rad_fan_123: !PwmFan { hwmon: it8688, name: pwm1 }
+  rad_fan_456: !PwmFan { hwmon: it8688, name: pwm2 }
+  rad_fan_789: !PwmFan { hwmon: it8688, name: pwm3 }
+rules:
+- outputs:
+  - rad_fan_123
+  - rad_fan_456
+  - rad_fan_789
+  rule: !Maximum
+  - !Static 0.2
+  - !Curve
+    input: t_amd_cpu
+    keys: &rad_curve_keys
+    - { input:  0.0, output: 0.0 }
+    - { input: 40.0, output: 0.3 }
+    - { input: 60.0, output: 0.5 }
+    - { input: 75.0, output: 1.0 }
+  - !Curve
+    input: t_amd_gpu
+    keys: *rad_curve_keys
+  - !Curve
+    input: t_nv_gpu1
+    keys: *rad_curve_keys
+  - !Curve
+    input: t_nv_gpu2
+    keys: *rad_curve_keys
