@@ -38,7 +38,7 @@ fn with_spec(path: impl AsRef<Path>, spec: impl AsRef<str>) -> Option<PathBuf> {
         path.file_name()
             .map(|s| s.to_string_lossy())
             .and_then(|file_name| file_name.split("_").next().map(|s| s.to_string()))
-            .map(move |base_name| dir_name.join(format!("{}_{}", base_name, spec.as_ref())) )
+            .map(move |base_name| dir_name.join(format!("{}_{}", base_name, spec.as_ref())))
     })
 }
 
@@ -71,9 +71,7 @@ impl Sensor for HwmonSensor {
                 ReadFileError::Io(e) => e,
                 ReadFileError::Parse(e) => io::Error::other(e),
             })?
-            .ok_or_else(|| {
-                io::Error::other("failed to get critical file path")
-            })? as f64
+            .ok_or_else(|| io::Error::other("failed to get critical file path"))? as f64
             * 1e-3)
     }
 }
@@ -93,18 +91,40 @@ pub fn search_hwmon(name: &str) -> io::Result<Option<PathBuf>> {
     Ok(None)
 }
 
+pub enum SearchInput<'s> {
+    ByName(&'s str),
+    ByLabel(&'s str),
+}
+
 /// Search for a hwmon input by name and label
-pub fn search_input(name: &str, label: &str) -> io::Result<Option<PathBuf>> {
+pub fn search_input(name: &str, predicate: SearchInput) -> io::Result<Option<PathBuf>> {
     if let Some(hwmon) = search_hwmon(name)? {
         for file in hwmon.read_dir()?.filter_map(|r| r.ok()) {
             let path = file.path();
-            if let Some(path_str) = path.as_os_str().to_str()
-                && path_str.ends_with("label")
-                    && read_to_string(&path)?.trim() == label {
-                        let input = format!("{}input", path_str.trim_end_matches("label"));
+            if let Some(path_str) = path.as_os_str().to_str() {
+                match predicate {
+                    SearchInput::ByName(in_name)
+                        if path_str.ends_with("_input")
+                            && path_str
+                                .rsplit_once('/')
+                                .map(|(_, name_str)| name_str.trim_end_matches("_input") == in_name)
+                                .unwrap_or_default() =>
+                    {
+                        let input = path_str;
+                        debug!("found hwmon input {}/{} at {}", name, in_name, input);
+                        return Ok(Some(input.into()));
+                    }
+                    SearchInput::ByLabel(label)
+                        if path_str.ends_with("_label")
+                            && read_to_string(&path)?.trim() == label =>
+                    {
+                        let input = format!("{}_input", path_str.trim_end_matches("_label"));
                         debug!("found hwmon input {}/{} at {}", name, label, input);
                         return Ok(Some(input.into()));
                     }
+                    _ => {}
+                }
+            }
         }
     }
     Ok(None)

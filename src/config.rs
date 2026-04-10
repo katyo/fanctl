@@ -56,7 +56,8 @@ pub enum FindHwmonError {
 #[serde(untagged)]
 pub enum HwmonSensor {
     Path { path: PathBuf },
-    Search { hwmon: String, label: String },
+    Name { hwmon: String, name: String },
+    Label { hwmon: String, label: String },
 }
 
 impl HwmonSensor {
@@ -66,13 +67,24 @@ impl HwmonSensor {
                 use crate::path_ext::PathExt;
                 path.expand_wildcards().map_err(FindHwmonError::from)
             }
-            HwmonSensor::Search { hwmon, label } => hwmon::search_input(hwmon, label)
-                .map_err(FindHwmonError::from)
-                .and_then(|v| {
-                    v.map(Ok).unwrap_or_else(|| {
-                        Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label)))
+            HwmonSensor::Name { hwmon, name } => {
+                hwmon::search_input(hwmon, hwmon::SearchInput::ByName(name))
+                    .map_err(FindHwmonError::from)
+                    .and_then(|v| {
+                        v.map(Ok).unwrap_or_else(|| {
+                            Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, name)))
+                        })
                     })
-                }),
+            }
+            HwmonSensor::Label { hwmon, label } => {
+                hwmon::search_input(hwmon, hwmon::SearchInput::ByLabel(label))
+                    .map_err(FindHwmonError::from)
+                    .and_then(|v| {
+                        v.map(Ok).unwrap_or_else(|| {
+                            Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label)))
+                        })
+                    })
+            }
         }
     }
 }
@@ -142,17 +154,11 @@ impl TryInto<Box<dyn Fan>> for &Output {
 
     fn try_into(self) -> Result<Box<dyn Fan>, Self::Error> {
         match self {
-            Output::PwmFan {
-                hwmon,
-                name,
-            } => {
+            Output::PwmFan { hwmon, name } => {
                 let fan = hwmon::PwmFan::new(hwmon.path()?, name.clone())?;
                 Ok(Box::new(fan))
             }
-            Output::AmdgpuFan {
-                hwmon,
-                prefix,
-            } => {
+            Output::AmdgpuFan { hwmon, prefix } => {
                 let fan = hwmon
                     .path()
                     .map(|path| hwmon::amdgpu::AmdgpuFan::new(path, prefix))?;

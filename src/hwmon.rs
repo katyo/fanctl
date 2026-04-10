@@ -4,4 +4,4 @@ mod sensor;
 pub mod util;
 
 pub use pwm::*;
-pub use sensor::{HwmonSensor, search_hwmon, search_input};
+pub use sensor::{HwmonSensor, SearchInput, search_hwmon, search_input};
