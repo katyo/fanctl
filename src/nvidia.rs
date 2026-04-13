@@ -12,6 +12,7 @@ static NVML: OnceLock<Result<Nvml, NvmlError>> = OnceLock::new();
 pub fn nvml() -> Result<&'static Nvml, NvmlError> {
     NVML.get_or_init(Nvml::init)
         .as_ref()
+        .inspect_err(|error| error!("NvError: {error}"))
         .map_err(|_error| NvmlError::NotFound)
 }
 

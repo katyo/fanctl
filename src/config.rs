@@ -72,7 +72,7 @@ impl HwmonSensor {
                     .map_err(FindHwmonError::from)
                     .and_then(|v| {
                         v.map(Ok).unwrap_or_else(|| {
-                            Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, name)))
+                            Err(FindHwmonError::NotFound(format!("{}/name:{}", hwmon, name)))
                         })
                     })
             }
@@ -81,7 +81,10 @@ impl HwmonSensor {
                     .map_err(FindHwmonError::from)
                     .and_then(|v| {
                         v.map(Ok).unwrap_or_else(|| {
-                            Err(FindHwmonError::NotFound(format!("{}/{}", hwmon, label)))
+                            Err(FindHwmonError::NotFound(format!(
+                                "{}/label:{}",
+                                hwmon, label
+                            )))
                         })
                     })
             }

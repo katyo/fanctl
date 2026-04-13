@@ -47,7 +47,7 @@ const ENABLE_PATH: &str = "enable";
 
 pub struct PwmFan<P: AsRef<Path>> {
     name: String,
-    initial_state: PwmEnableState,
+    initial_state: Option<PwmEnableState>,
     real_path: P,
 }
 
@@ -60,7 +60,7 @@ impl<P: AsRef<Path>> PwmFan<P> {
     pub fn new(base_path: P, name: String) -> io::Result<Self> {
         let mut ret = PwmFan {
             name,
-            initial_state: PwmEnableState::Disabled,
+            initial_state: None,
             real_path: base_path,
         };
         ret.initial_state = ret.enabled()?;
@@ -78,11 +78,15 @@ impl<P: AsRef<Path>> PwmFan<P> {
         path
     }
 
-    pub fn enabled(&self) -> io::Result<PwmEnableState> {
+    pub fn enabled(&self) -> io::Result<Option<PwmEnableState>> {
         use util::ReadFileResult;
         let enabled_path = self.get_path(Some(ENABLE_PATH));
-        let value: u8 = util::read_file_value(&enabled_path, 2).into_io_result()?;
-        Ok(PwmEnableState::from(value))
+        Ok(if fs::exists(&enabled_path)? {
+            Some(util::read_file_value(&enabled_path, 2).into_io_result()?)
+        } else {
+            None
+        }
+        .map(|value: u8| PwmEnableState::from(value)))
     }
 
     pub fn set_enabled_pwm(&mut self, state: PwmEnableState) -> io::Result<()> {
@@ -103,7 +107,10 @@ impl<P: AsRef<Path>> PwmFan<P> {
 
 impl<P: AsRef<Path>> Fan for PwmFan<P> {
     fn set_enabled(&mut self, enabled: bool) -> io::Result<()> {
-        self.set_enabled_pwm(pwm_enable_state(enabled))
+        if self.initial_state.is_some() {
+            self.set_enabled_pwm(pwm_enable_state(enabled))?;
+        }
+        Ok(())
     }
 
     fn set_value(&mut self, value: f64) -> io::Result<()> {
@@ -112,6 +119,9 @@ impl<P: AsRef<Path>> Fan for PwmFan<P> {
     }
 
     fn close(&mut self) -> io::Result<()> {
-        self.set_enabled_pwm(self.initial_state)
+        if let Some(initial_state) = self.initial_state {
+            self.set_enabled_pwm(initial_state)?
+        }
+        Ok(())
     }
 }
